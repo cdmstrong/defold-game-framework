@@ -98,6 +98,11 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
   `改 framework/` → `git commit` → `python3 scripts/publish-framework.py`（自动推 `fw-dist`、打印新 URL）
   → 游戏改 `dependencies#0` 一行 → `resolve` + `build` 复验。
 - `fw-dist` 的每条提交没有父历史，是一条独立快照；回滚依赖就是指回旧的 dist sha。
+- ⚠️ **发完快照立刻 resolve 会偶发 `Failed to fetch library`**：GitHub 对刚推的 commit 有索引延迟，
+  几秒后 `curl -sI <url>` 才回 200。重试即可，别急着怀疑 URL 写错。
+- ⚠️ **`bob resolve` 即使有库下载失败也可能返回 0**。判定成功不能只看退出码，要 `grep -E "SEVERE|Failed to fetch"`
+  日志；否则会拿旧的依赖缓存继续 build，产物里出现 `the Lua module '/framework/core/app.lua' can't be found`。
+- 文档（`framework/docs/`）也在 `framework/` 里，所以**改文档同样要发一次快照**，游戏侧才能看到新版本。
 
 ## 4. 编译（顺序不能反）
 
