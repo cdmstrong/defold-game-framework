@@ -11,35 +11,61 @@
 
 ## 0. 复用原则
 
-框架只维护一份：`game-framework` 仓库；每个游戏一个独立仓库，通过 `game.project` 的
-`dependencies` 以**不可变 commit ZIP** 引用。改框架 = 发新 tag + 游戏改一行 URL。
+框架只维护一份：`game-framework` 仓库（它就是 `defold-game-framework` 的软链，单仓库单 `.git`）；
+每个游戏一个独立仓库，通过 `game.project` 的 `dependencies#0` 引用 `fw-dist` 分支的**不可变快照**。
+改框架 = 跑一次 `scripts/publish-framework.py` + 游戏改一行 URL。
 
-## 1. 复制骨架
+## 1. 建项目
+
+### 1.1 一条命令（推荐）
+
+```bash
+cd /Users/chendongming/coding/auto-games/defold/game-framework
+python3 scripts/new-game.py --type platformer --name my-new-game --title "我的游戏"
+```
+
+它按 `templates/platformer/template.json` 依次做：复制骨架（排除清单一律来自 manifest）→
+替换标识（`Sky Climber`/`sky_climber`/`climber.`/`_G.SKY_SESSION`）→ `version` 归 `0.1.0` →
+写 `dependencies#0`（`fw-dist` 最新 sha）→ 拷 `bob.jar` → `resolve` + `build` 并断言
+`framework/**/*.luac` 数量 → `git init` 首次提交。任何一步失败就停在那步并打印原因。
+
+### 1.2 手工等价流程（脚本坏了/要微调时用）
 
 ```bash
 BASE=/Users/chendongming/coding/auto-games/defold
-SRC=$BASE/<模板项目>
-GAME=<新项目目录名>
+SRC=$BASE/game-framework/templates/platformer
+GAME=my-new-game
 DST=$BASE/$GAME
 
 rsync -a --exclude '.git/' --exclude 'build/' --exclude 'dist/' \
       --exclude '.internal/' --exclude '.tools/' --exclude 'logs/' --exclude '.workbuddy/' \
-      --exclude '.editor_settings' --exclude 'screenshot.png' \
+      --exclude '.editor_settings' --exclude 'screenshot.png' --exclude '.DS_Store' \
+      --exclude 'docs/' --exclude 'template.json' --exclude 'AGENTS.md' \
       "$SRC/" "$DST/"
 cd "$DST"
-mkdir -p .tools
-cp "$BASE/game-framework/.tools/bob.jar" .tools/ 2>/dev/null || cp "$SRC/.tools/bob.jar" .tools/
+mkdir -p .tools && cp "$BASE/platformer-game/.tools/bob.jar" .tools/
 ```
 
-必须排除本地产物：`build/`、`dist/`、`.internal/`、`logs/`、`.git/`、`.workbuddy/`、
-`.tools/`（bob.jar 238 MB，下一步单独复制）、`.editor_settings`、`screenshot.png`。
-`.gitignore` 里已有对应规则，复制后保留。
+必须排除本地产物与模板元数据：`build/`、`dist/`、`.internal/`、`logs/`、`.git/`、`.workbuddy/`、
+`.tools/`（bob.jar 238 MB，单独拷）、`.editor_settings`、`screenshot.png`、`.DS_Store`、
+`docs/`（模板里的设计文档属于上一款游戏）、`template.json`。
+
+> 注意：`bob.jar` 只在**游戏项目**里，框架仓库从来没有 `.tools/`。
+> 旧写法 `cp "$BASE/game-framework/.tools/bob.jar"` 必定失败，只能当 fallback。
+
+复制完还要补一样东西：`assets/fonts/ArialUnicode.ttf`（约 22 MB，不进 git）：
+
+```bash
+mkdir -p assets/fonts && cp "$BASE/platformer-game/assets/fonts/ArialUnicode.ttf" assets/fonts/
+```
+
+`version` 记得从模板的 `0.4.0` 改成 `0.1.0`。
 
 ## 2. 必改清单
 
 | 文件 | 改什么 | 不能漏 |
 |---|---|---|
-| `game.project` | `title`、`version`、`dependencies#0`（框架 commit/tag）、`[display]` 宽高 | `[script] shared_state = 1`（跨集合共享全局）、`[bootstrap] main_collection` |
+| `game.project` | `title`、`version`（→ `0.1.0`）、`dependencies#0`（`fw-dist` 快照 sha）、`[display]` 宽高 | `[script] shared_state = 1`（跨集合共享全局）、`[bootstrap] main_collection` |
 | `main.collection` | proxy 的 `collection:` 属性 | **写源路径** `/menu/menu.collection`，不是 `.collectionc` |
 | `script/session.script` | `app_id`、存档槽位名、`defaults()` / `validate()`、`sys.get_config_string` 的配置前缀、共享全局名 | init 里 `msg.post(".", "acquire_input_focus")` |
 | `script/world.script` | 玩法逻辑、配置前缀 | 与 session 的消息名保持一致 |
@@ -65,9 +91,13 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
 - Defold 依赖**扁平解析**：框架自己声明过的第三方库，游戏仓库仍要全部再声明一遍。
 - codeload 并发下载偶发 `Failed to fetch`，可重试；离线时把 ZIP 放本地 HTTP 服务
   （`python3 -m http.server 8899 --bind 127.0.0.1`，服务必须以后台任务常驻，用 `&` 会被回收）。
-- 框架升级：在 `game-framework`（本地工作副本，无 `.git`）改 → 同步到 `defold-game-framework`
-  （GitHub 发布仓库）→ `commit` + 打 tag + 重新打包含 `framework/`（含 `framework/docs/`）的 ZIP
+- `dependencies#0` 指向 **`fw-dist` 分支的快照**（树 = `game.project` + `framework/`，
+  约 60 KB），由 `scripts/publish-framework.py` 生成并打印 URL。别指向 `master` 的 sha——
+  那是整仓 332 KB，会把 `templates/`、`docs/`、`scripts/` 一起拉进游戏。
+- 框架升级（单仓库，没有"本地副本 → 发布仓库"这一步）：
+  `改 framework/` → `git commit` → `python3 scripts/publish-framework.py`（自动推 `fw-dist`、打印新 URL）
   → 游戏改 `dependencies#0` 一行 → `resolve` + `build` 复验。
+- `fw-dist` 的每条提交没有父历史，是一条独立快照；回滚依赖就是指回旧的 dist sha。
 
 ## 4. 编译（顺序不能反）
 
