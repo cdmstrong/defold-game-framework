@@ -1,0 +1,6 @@
+[project]
+title = defold-framework
+version = 1.1.0
+
+[library]
+include_dirs = framework
