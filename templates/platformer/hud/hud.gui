@@ -1,0 +1,27 @@
+fonts { name: "zh" font: "/assets/fonts/zh.font" }
+material: "/builtins/materials/gui.material"
+script: "/hud/hud.gui_script"
+max_nodes: 30
+nodes { id: "score" type: TYPE_TEXT position { x: 270 y: 880 z: 0 } size { x: 400 y: 60 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "0 m" font: "zh" scale { x: 1.4 y: 1.4 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "best" type: TYPE_TEXT position { x: 270 y: 826 z: 0 } size { x: 400 y: 40 z: 0 } color { x: 1 y: 0.85 z: 0.3 w: 1 } text: "最佳 0 m" font: "zh" scale { x: 0.8 y: 0.8 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "coin_label" type: TYPE_TEXT position { x: 270 y: 780 z: 0 } size { x: 400 y: 40 z: 0 } color { x: 1 y: 0.75 z: 0.2 w: 1 } text: "金币 0" font: "zh" scale { x: 0.7 y: 0.7 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "revive_root" type: TYPE_BOX position { x: 270 y: 480 z: 0.7 } size { x: 540 y: 960 z: 0 } color { x: 0 y: 0 z: 0 w: 0.7 } enabled: false }
+nodes { id: "revive_title" type: TYPE_TEXT parent: "revive_root" position { x: 0 y: 180 z: 0.1 } size { x: 500 y: 70 z: 0 } color { x: 1 y: 0.6 z: 0.2 w: 1 } text: "看广告复活一次" font: "zh" scale { x: 1.4 y: 1.4 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "revive_height" type: TYPE_TEXT parent: "revive_root" position { x: 0 y: 100 z: 0.1 } size { x: 500 y: 50 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "高度 0 m" font: "zh" scale { x: 1.1 y: 1.1 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "revive_btn" type: TYPE_BOX parent: "revive_root" position { x: 0 y: -40 z: 0.1 } size { x: 360 y: 90 z: 0 } color { x: 0.2 y: 0.8 z: 0.3 w: 1 } }
+nodes { id: "revive_btn_text" type: TYPE_TEXT parent: "revive_btn" position { x: 0 y: 0 z: 0.1 } size { x: 360 y: 60 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "看广告复活" font: "zh" scale { x: 1.1 y: 1.1 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "revive_giveup" type: TYPE_BOX parent: "revive_root" position { x: 0 y: -170 z: 0.1 } size { x: 360 y: 70 z: 0 } color { x: 0.4 y: 0.4 z: 0.4 w: 1 } }
+nodes { id: "revive_giveup_text" type: TYPE_TEXT parent: "revive_giveup" position { x: 0 y: 0 z: 0.1 } size { x: 360 y: 50 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "放弃" font: "zh" scale { x: 0.9 y: 0.9 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "gameover_root" type: TYPE_BOX position { x: 270 y: 480 z: 0.7 } size { x: 540 y: 960 z: 0 } color { x: 0 y: 0 z: 0 w: 0.7 } enabled: false }
+nodes { id: "go_title" type: TYPE_TEXT parent: "gameover_root" position { x: 0 y: 180 z: 0.1 } size { x: 500 y: 70 z: 0 } color { x: 1 y: 0.3 z: 0.25 w: 1 } text: "游戏结束" font: "zh" scale { x: 1.8 y: 1.8 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_height" type: TYPE_TEXT parent: "gameover_root" position { x: 0 y: 70 z: 0.1 } size { x: 500 y: 50 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "高度 0 m" font: "zh" scale { x: 1.2 y: 1.2 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_best" type: TYPE_TEXT parent: "gameover_root" position { x: 0 y: 20 z: 0.1 } size { x: 500 y: 50 z: 0 } color { x: 1 y: 0.85 z: 0.3 w: 1 } text: "最佳 0 m" font: "zh" scale { x: 1 y: 1 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_coin" type: TYPE_TEXT parent: "gameover_root" position { x: 0 y: -30 z: 0.1 } size { x: 500 y: 50 z: 0 } color { x: 1 y: 0.75 z: 0.2 w: 1 } text: "金币 0" font: "zh" scale { x: 1 y: 1 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_ad_btn" type: TYPE_BOX parent: "gameover_root" position { x: 0 y: -110 z: 0.1 } size { x: 360 y: 90 z: 0 } color { x: 0.2 y: 0.6 z: 1 w: 1 } }
+nodes { id: "go_ad_text" type: TYPE_TEXT parent: "go_ad_btn" position { x: 0 y: 0 z: 0.1 } size { x: 360 y: 60 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "看广告 金币x3" font: "zh" scale { x: 1 y: 1 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_coin_btn" type: TYPE_BOX parent: "gameover_root" position { x: 0 y: -195 z: 0.1 } size { x: 360 y: 70 z: 0 } color { x: 0.95 y: 0.55 z: 0.1 w: 1 } }
+nodes { id: "go_coin_text" type: TYPE_TEXT parent: "go_coin_btn" position { x: 0 y: 0 z: 0.1 } size { x: 360 y: 50 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "看广告 +50 金币" font: "zh" scale { x: 0.9 y: 0.9 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "go_hint" type: TYPE_TEXT parent: "gameover_root" position { x: 0 y: -270 z: 0.1 } size { x: 500 y: 40 z: 0 } color { x: 0.8 y: 0.8 z: 0.8 w: 1 } text: "轻触屏幕返回主页" font: "zh" scale { x: 0.9 y: 0.9 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }
+nodes { id: "item_line" type: TYPE_TEXT position { x: 270 y: 742 z: 0 } size { x: 460 y: 36 z: 0 } color { x: 0.55 y: 0.95 z: 1 w: 1 } text: "" font: "zh" scale { x: 0.65 y: 0.65 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } enabled: false }
+nodes { id: "start_boost_btn" type: TYPE_BOX position { x: 270 y: 700 z: 0.5 } size { x: 320 y: 70 z: 0 } color { x: 0.95 y: 0.55 z: 0.1 w: 1 } }
+nodes { id: "start_boost_text" type: TYPE_TEXT parent: "start_boost_btn" position { x: 0 y: 0 z: 0.1 } size { x: 320 y: 50 z: 0 } color { x: 1 y: 1 z: 1 w: 1 } text: "看广告 金币x2" font: "zh" scale { x: 0.9 y: 0.9 z: 0.1 } outline { x: 0 y: 0 z: 0 w: 1 } }

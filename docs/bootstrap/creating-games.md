@@ -1,5 +1,10 @@
 # 批量创建新游戏的操作手册
 
+> **历史文档（2026-11-18 归档）**。本文的 `examples/<游戏名>/` 结构对应当时的 miner 模板，
+> 仓库里的 `examples/` 已更名为 `templates/`（`miner/`、`ui-demo/`），新流程请用
+> [`framework/docs/project-bootstrap.md`](../../framework/docs/project-bootstrap.md) 与
+> `templates/platformer/` 的 proxy 骨架。本文保留是为了记住当时的目录约定与踩过的坑。
+
 本文说明如何用 `defold-game-framework` 框架，批量创建独立游戏仓库。
 
 ## 仓库地址

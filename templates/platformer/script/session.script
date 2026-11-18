@@ -1,0 +1,378 @@
+-- 全局会话层（main.collection 常驻）：框架服务 + 存档经济 + 道具商店 + 场景切换。
+--
+-- 场景结构：main.collection = loader(session.script + menu_proxy + game_proxy)
+--   menu/menu.collection  ← 主页（商店，独立场景，未开局时才加载）
+--   game/game.collection  ← 对局（world/player/hud）
+-- 两个子场景都通过 collection proxy 由本脚本 load/enable/unload，互不常驻；
+-- 跨集合 URL 一律由本脚本下发给子场景（menu_boot 的 session_url / start_game 的 session_url），
+-- 避免子集合里手写绝对路径带来的解析歧义。
+
+local App = require "framework.core.app"
+local Bus = require "framework.core.event_bus"
+local Pause = require "framework.core.pause"
+local Save = require "framework.save.save_manager"
+local Storage = require "framework.save.storage"
+local Platform = require "framework.platform.platform"
+local RewardAd = require "framework.platform.reward_ad"
+
+local COIN_CD = 120   -- 「金币补充」广告冷却（秒）
+local AUTOTEST = sys.get_config_string("climber.autotest", "") == "1"
+
+-- 道具目录：价格与名称集中在此，调数值只改这里。
+-- 一次性使用：开局自动消耗持有量各 1 个，生效一整局，不跨局保留。
+local ITEMS = {
+    { id = "shield", name = "护盾", price = 30 },
+    { id = "magnet", name = "磁铁", price = 50 },
+    { id = "rocket", name = "火箭靴", price = 80 },
+}
+local ITEM_ORDER = { "shield", "magnet", "rocket" }
+local ITEM_BY_ID = {}
+for _, it in ipairs(ITEMS) do ITEM_BY_ID[it.id] = it end
+
+local function logger(topic, detail) print("SESS_DIAG " .. topic .. " " .. detail) end
+
+local function defaults()
+    return { best = 0, coins = 0, items = { shield = 0, magnet = 0, rocket = 0 } }
+end
+
+-- 老存档（只有 best/coins）自动补齐 items 字段；数值统一规整成非负整数。
+local function normalize(state)
+    state.best = math.max(0, math.floor(tonumber(state.best) or 0))
+    state.coins = math.max(0, math.floor(tonumber(state.coins) or 0))
+    state.items = state.items or {}
+    for _, id in ipairs(ITEM_ORDER) do
+        state.items[id] = math.max(0, math.floor(tonumber(state.items[id]) or 0))
+    end
+end
+
+local function validate(state)
+    if type(state) ~= "table" then return false end
+    if type(state.best) ~= "number" or state.best < 0 then return false end
+    if state.coins ~= nil and (type(state.coins) ~= "number" or state.coins < 0) then return false end
+    if state.items ~= nil and type(state.items) ~= "table" then return false end
+    return true
+end
+
+local function commit(self)
+    local ok, err = self.save:commit("game", self.state)
+    if not ok then print("SESS_SAVE_FAIL code=" .. tostring(err and err.code)) end
+    return ok
+end
+
+local function menu_payload(self)
+    local items = {}
+    for _, id in ipairs(ITEM_ORDER) do items[id] = self.state.items[id] or 0 end
+    return {
+        coins = self.state.coins,
+        best = self.state.best,
+        items = items,
+        ad_ok = self.ad_supported,
+    }
+end
+
+local function push_menu(self)
+    if self.menu_url then
+        msg.post(self.menu_url, "menu_state", menu_payload(self))
+    end
+end
+
+local function load_scene(self, name)
+    if self.pending or self.pending_unload or self.scene == name then return end
+    self.pending = name
+    msg.post(name == "menu" and "#menu_proxy" or "#game_proxy", "load")
+    print("SESS_SCENE load=" .. name)
+end
+
+-- 开局消耗：持有量各扣 1，返回本局生效道具表
+local function consume_items(self)
+    local used = {}
+    for _, id in ipairs(ITEM_ORDER) do
+        local n = self.state.items[id] or 0
+        if n > 0 then
+            self.state.items[id] = n - 1
+            used[id] = 1
+        end
+    end
+    return used
+end
+
+local function items_desc(used)
+    local parts = {}
+    for _, id in ipairs(ITEM_ORDER) do
+        if used[id] then parts[#parts + 1] = ITEM_BY_ID[id].name end
+    end
+    if #parts == 0 then return "-" end
+    return table.concat(parts, ",")
+end
+
+-- 广告终态统一处理：按 tag 分派发奖，结果回传给发起方（world）。
+-- 必须声明在 init 之前：init 里的 on_ad_close 闭包在编译期只能看到「已声明」的局部函数，
+-- 声明在后会被解析为全局 nil，框架 emit_close 用 pcall 包住监听器，错误被吞掉，
+-- 外部表现就是「广告播完了但什么奖励都没发」。改动顺序前请保持本函数在 init 上方。
+local function handle_ad_result(self, reward, res)
+    local tag = self.pending_tag
+    local target = self.ad_target
+    self.pending_tag = nil
+    self.ad_target = nil
+    if not res.success then
+        print("SESS_AD_FAIL tag=" .. tostring(tag) .. " reason=" .. tostring(res.reason))
+        if tag == "revive" and target then msg.post(target, "revive_failed") end
+        return
+    end
+    local granted = reward:grant_once(res.request_id, function()
+        if not target then return end
+        if tag == "revive" then
+            msg.post(target, "revive_ok")
+        elseif tag == "double" then
+            msg.post(target, "coin_tripled")
+        elseif tag == "bonus" then
+            msg.post(target, "coin_doubled")
+        elseif tag == "coin" then
+            msg.post(target, "coin_bonus", { amount = 50 })
+            self.coin_cd_until = (self.now or 0) + COIN_CD
+            msg.post(target, "coin_cd", { seconds = COIN_CD })
+        end
+        print("SESS_AD_GRANT tag=" .. tostring(tag))
+    end)
+    if granted then commit(self) end
+end
+
+function init(self)
+    -- Defold 手册「输入焦点和集合代理组件」：proxy 加载的世界有自己的输入栈，
+    -- 只有当持有 collectionproxy 组件的 GO 自己拿到输入焦点时，该栈才会被分派。
+    -- 本 GO 持有 menu_proxy/game_proxy，所以必须在这里 acquire；漏掉则两个子场景都收不到输入。
+    msg.post(".", "acquire_input_focus")
+    local storage = Storage.defold(sys, { app_id = "sky_climber" })
+
+    self.app = App.create({ services = {
+        { name = "events", create = function()
+            local bus = Bus.create({ logger = logger }); bus.shutdown = bus.clear; return bus
+        end },
+        { name = "pause", create = function() return Pause.create() end },
+        { name = "save", create = function()
+            local save = Save.create(storage, { defaults = defaults, validate = validate })
+            save.shutdown = save.dispose
+            return save
+        end },
+        { name = "platform", create = function() return Platform.create({ sys = sys }) end },
+        { name = "reward_ad", create = function()
+            local ad_platform = sys.get_config_string("climber.ad_platform", "mock")
+            local reward = RewardAd.create({
+                platform = ad_platform,
+                sys = sys,
+                html5 = html5,
+                out = function(s) print(s) end,
+            })
+            reward:on_ad_open(function()
+                if not self.ad_release then self.ad_release = self.app:service("pause"):acquire("ad") end
+                if self.ad_target then msg.post(self.ad_target, "ad_pause") end
+            end)
+            reward:on_ad_close(function(res)
+                if self.ad_release then self.ad_release(); self.ad_release = nil end
+                if self.ad_target then msg.post(self.ad_target, "ad_resume") end
+                handle_ad_result(self, reward, res)
+            end)
+            return reward
+        end },
+    } })
+    assert(self.app:start())
+    self.save = self.app:service("save")
+    self.pause = self.app:service("pause")
+    self.reward_ad = self.app:service("reward_ad")
+
+    local snapshot, meta, load_err = self.save:load("game")
+    if load_err then
+        print("SESS_LOAD_ERROR code=" .. tostring(load_err.code) .. " " .. tostring(load_err.message))
+    end
+    self.state = snapshot or defaults()
+    normalize(self.state)
+    print("SESS_LOAD source=" .. (meta and meta.source or "none")
+        .. " best=" .. self.state.best .. " coins=" .. self.state.coins)
+
+    local det = self.app:service("platform"):detect()
+    print("SESS_PLATFORM kind=" .. det.kind .. " system=" .. det.system_name
+        .. " ad_platform=" .. self.reward_ad:get_platform_id())
+
+    self.now = 0
+    self.coin_cd_until = 0
+    self.ad_supported = self.reward_ad:is_supported()
+    self.scene, self.pending, self.pending_unload = nil, nil, nil
+    self.run_items = {}
+    print("SESS_AD_SUPPORTED supported=" .. tostring(self.ad_supported))
+
+    -- 共享全局（game.project 已开 shared_state）：子集合脚本据此拿到本脚本 URL，
+    -- 避免依赖 collection proxy 内部路径（"proxy/obj#component" 在 bob 下解析不到）。
+    _G.SKY_SESSION = msg.url()
+
+    load_scene(self, "menu")
+    -- autotest / 广告冒烟需要自动进入对局（商店冒烟自己控制开局时机）
+    if AUTOTEST or sys.get_config_string("climber.smoke_ad", "") == "1" then
+        timer.delay(0.6, false, function() msg.post(".", "start_request") end)
+    end
+
+    -- 冒烟自测：--config=climber.smoke_ad=1（配合 mock_death 验证复活限次与结算）
+    -- 商店冒烟：自动买 3 个道具 → 开局（验证消耗）→ 假死（验证护盾）→ 返回主页（验证钱包/持有）
+    -- 通过标志：SESS_BUY x3 → SESS_START items=护盾,磁铁,火箭靴 → WORLD_SHIELD_SAVE → 回主页 持有 0/金币 90
+    if sys.get_config_string("climber.smoke_shop", "") == "1" then
+        timer.delay(0.6, false, function() msg.post(".", "buy", { id = "shield" }) end)
+        timer.delay(0.8, false, function() msg.post(".", "buy", { id = "magnet" }) end)
+        timer.delay(1.0, false, function() msg.post(".", "buy", { id = "rocket" }) end)
+        timer.delay(1.6, false, function() msg.post(".", "start_request") end)
+        timer.delay(14.0, false, function() msg.post(".", "back_to_menu") end)
+    end
+
+    if sys.get_config_string("climber.smoke_ad", "") == "1" then
+        -- 不手写 proxy 内路径（bob 下解析不到）：统一用 world_ready 记下的真实 URL
+        local function to_world(id)
+            if self.world_url then msg.post(self.world_url, id) end
+        end
+        timer.delay(0.8, false, function() msg.post(".", "start_request") end)
+        timer.delay(2.5, false, function() to_world("ad_bonus") end)
+        timer.delay(5.0, false, function() to_world("ad_revive") end)
+        timer.delay(14.0, false, function() to_world("ad_double") end)
+        timer.delay(15.0, false, function() to_world("ad_coin") end)
+        timer.delay(21.0, false, function() msg.post(".", "back_to_menu") end)
+        -- 二开局：在 +50 的 120s 冷却期内再次死亡进结算，验证按钮「冷却中 N 秒」置灰态
+        --（revive_used 每局重置，所以二轮也要自动复活一次才会死透进结算）
+        timer.delay(23.0, false, function() msg.post(".", "start_request") end)
+        timer.delay(26.5, false, function() to_world("ad_revive") end)
+    end
+end
+
+function update(self, dt)
+    self.now = (self.now or 0) + dt
+    local ok, err = self.app:update(dt); assert(ok, err and err.message)
+end
+
+-- 输入统一路由：本脚本持有焦点（使 proxy 子树进入主栈），再把 action 转发给当前场景。
+-- 走转发而非各场景自己 acquire 的原因：单点持有，场景切换期不需要重新抢焦点；
+-- 代价是每帧多一次 msg.post，且场景内组件无法用「消费输入」表达 GUI 遮挡优先级。
+function on_input(self, action_id, action)
+    local target = nil
+    if self.scene == "menu" then target = self.menu_url
+    elseif self.scene == "game" then target = self.world_url end
+    -- 场景切换窗口期（旧场景已卸载、新场景未就绪）不转发，否则 msg.post 报找不到 socket
+    if target and not self.pending and not self.pending_unload then
+        msg.post(target, "session_input", {
+            action_id = action_id,
+            pressed = action.pressed,
+            released = action.released,
+            value = action.value,
+            x = action.x,
+            y = action.y,
+        })
+    end
+    return true
+end
+
+function on_message(self, message_id, message, sender)
+    if message_id == hash("proxy_loaded") then
+        local scene = self.pending
+        self.pending = nil
+        if scene == "menu" then
+            self.scene = "menu"
+            msg.post("#menu_proxy", "enable")
+            push_menu(self)   -- menu_ready 可能早于本消息到达，这里补推一次
+        elseif scene == "game" then
+            self.scene = "game"
+            msg.post("#game_proxy", "enable")
+        end
+        -- 不猜子集合内的对象路径：子场景起来后自己发 ready 消息，本脚本用 sender 回包
+    elseif message_id == hash("proxy_unloaded") then
+        local next_scene = self.pending_unload
+        self.pending_unload = nil
+        self.scene = nil
+        if next_scene then load_scene(self, next_scene) end
+    elseif message_id == hash("menu_ready") then
+        -- 主页 gui 起来后报到：记下它的 URL（sender），回推当前经济状态
+        self.menu_url = sender
+        print("SESS_MENU_READY")
+        push_menu(self)
+    elseif message_id == hash("world_ready") then
+        -- 对局 world 起来后报到：下发本局道具与会话层 URL
+        self.world_url = sender
+        print("SESS_WORLD_READY")
+        msg.post(sender, "start_game", {
+            items = self.run_items or {},
+            session_url = msg.url(),
+        })
+    elseif message_id == hash("start_request") then
+        -- 主页「开始游戏」：消耗道具 → 卸主页 → 加载对局
+        if self.scene ~= "menu" or self.pending or self.pending_unload then return end
+        self.run_items = consume_items(self)
+        commit(self)
+        print("SESS_START items=" .. items_desc(self.run_items) .. " coins=" .. self.state.coins)
+        self.pending_unload = "game"
+        msg.post("#menu_proxy", "unload")
+    elseif message_id == hash("back_to_menu") then
+        -- 结算结束：卸对局 → 回主页
+        if self.scene ~= "game" or self.pending_unload then return end
+        self.pending_unload = "menu"
+        msg.post("#game_proxy", "unload")
+    elseif message_id == hash("buy") then
+        local def = ITEM_BY_ID[message.id]
+        if not def or self.scene ~= "menu" then return end
+        if self.state.coins < def.price then
+            if self.menu_url then msg.post(self.menu_url, "toast", { text = "金币不足" }) end
+            return
+        end
+        self.state.coins = self.state.coins - def.price
+        self.state.items[def.id] = (self.state.items[def.id] or 0) + 1
+        commit(self)
+        push_menu(self)
+        if self.menu_url then msg.post(self.menu_url, "toast", { text = def.name .. " +1" }) end
+        print("SESS_BUY id=" .. def.id .. " coins=" .. self.state.coins .. " own=" .. self.state.items[def.id])
+    elseif message_id == hash("game_over") then
+        local gained = math.max(0, math.floor(tonumber(message.coin) or 0))
+        self.state.coins = self.state.coins + gained
+        local record = (message.height or 0) > self.state.best
+        if record then self.state.best = math.floor(message.height) end
+        commit(self)
+        local cd = math.max(0, math.ceil((self.coin_cd_until or 0) - self.now))
+        print("SESS_GAME_OVER height=" .. tostring(message.height) .. " gained=" .. gained
+            .. " wallet=" .. self.state.coins .. " best=" .. self.state.best)
+        msg.post(sender, "over_info", {
+            best = self.state.best,
+            wallet = self.state.coins,
+            coin_cd = cd,
+            ad_ok = self.ad_supported,
+            record = record,
+        })
+    elseif message_id == hash("wallet_add") then
+        -- 结算 ×3 / +50 的增量入账（避免与 game_over 重复记账）
+        local amount = math.floor(tonumber(message.amount) or 0)
+        if amount ~= 0 then
+            self.state.coins = math.max(0, self.state.coins + amount)
+            commit(self)
+            msg.post(sender, "wallet", { value = self.state.coins })
+            print("SESS_WALLET add=" .. amount .. " total=" .. self.state.coins)
+        end
+    elseif message_id == hash("ad_revive") or message_id == hash("ad_bonus")
+        or message_id == hash("ad_double") or message_id == hash("ad_coin") then
+        -- 对局里的四个广告入口统一由本脚本持有 RewardAd 服务
+        local tag = (message_id == hash("ad_revive") and "revive")
+            or (message_id == hash("ad_bonus") and "bonus")
+            or (message_id == hash("ad_double") and "double") or "coin"
+        if tag == "coin" then
+            local left = math.ceil((self.coin_cd_until or 0) - self.now)
+            if left > 0 then
+                print("SESS_COIN_CD left=" .. left)
+                msg.post(sender, "coin_cd", { seconds = left })
+                return
+            end
+        end
+        self.ad_target = sender
+        self.pending_tag = tag
+        local res = self.reward_ad:show_rewarded({ tag = tag })
+        if not res.pending then
+            print("SESS_AD_SHOW tag=" .. tag .. " reason=" .. tostring(res.reason)
+                .. " success=" .. tostring(res.success))
+        end
+    end
+end
+
+function final(self)
+    if self.ad_release then self.ad_release(); self.ad_release = nil end
+    pcall(function() self.save:commit("game", self.state) end)
+    assert(self.app:shutdown())
+end

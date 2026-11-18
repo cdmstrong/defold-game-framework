@@ -1,0 +1,47 @@
+{
+  "name": "platformer",
+  "title": "横版跳跃 / 跑酷骨架（Sky Climber 快照）",
+  "skeleton": "project",
+  "status": "verified",
+  "entry": "game.project",
+  "snapshot_of": "/Users/chendongming/coding/auto-games/defold/platformer-game",
+  "refresh_command": "python3 scripts/snapshot-template.py --from ../platformer-game --name platformer",
+  "display": { "width": 540, "height": 960, "high_dpi": 1, "update_frequency": 60 },
+  "structure": {
+    "main.collection": "常驻 loader（session.script + menu_proxy + game_proxy）",
+    "menu/": "主页 / 商店（menu.collection + menu.gui）",
+    "game/": "对局场景（game.collection + 玩家/金币/植物/石头/平台）",
+    "hud/": "局内 HUD",
+    "script/session.script": "唯一存档写入者 + 场景调度 + 跨集合共享 URL",
+    "script/world.script": "玩法主循环",
+    "input/game.input_binding": "输入绑定"
+  },
+  "excludes": [
+    ".git/", "build/", "dist/", ".internal/", ".tools/", "logs/", ".workbuddy/",
+    ".editor_settings", "screenshot.png", "docs/", "AGENTS.md", "assets/fonts/ArialUnicode.ttf"
+  ],
+  "replace": {
+    "Sky Climber": "{{title}}",
+    "sky_climber": "{{app_id}}",
+    "climber.": "{{prefix}}.",
+    "_G.SKY_SESSION": "_G.{{PREFIX}}_SESSION"
+  },
+  "reset": { "version": "0.1.0" },
+  "requires": [
+    "assets/fonts/ArialUnicode.ttf（约 22 MB，本模板不含；从任一游戏项目 assets/fonts/ 拷贝，否则 .gui 里的 zh 字体编译不过）"
+  ],
+  "smoke": [
+    "{{prefix}}.autotest=1",
+    "{{prefix}}.autotest_target=<高度>",
+    "{{prefix}}.smoke_ad=1",
+    "{{prefix}}.smoke_shop=1",
+    "{{prefix}}.mock_death=1",
+    "{{prefix}}.ad_platform=taptap"
+  ],
+  "verify": {
+    "resolve": "bob --root . resolve",
+    "build": "bob --root . --output build/arm64-macos --platform arm64-macos --variant debug --archive",
+    "expect_glob": "build/arm64-macos/framework/**/*.luac",
+    "expect_min": 15
+  }
+}

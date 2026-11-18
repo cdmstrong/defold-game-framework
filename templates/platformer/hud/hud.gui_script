@@ -1,0 +1,178 @@
+-- HUD：实时高度/最佳/金币显示 + 复活面板 + 游戏结束结算面板。
+-- 复活/放弃的输入由 world.script 处理；这里只做展示与按钮消息转发。
+-- 结算金币行 = 本局金币 / 局外累计（累计由 bootstrap 的 wallet 消息维护）。
+
+-- 注意：本函数声明在 init 之前——init 内的闭包只能看到已声明的 local（否则会变成全局 nil）。
+local function refresh_coin_line(self)
+    local run = self.run_coin or 0
+    local total = self.wallet or 0
+    gui.set_text(self.go_coin, "金币 " .. tostring(run) .. " / 累计 " .. tostring(total))
+end
+
+-- 按钮底色：正常（橙）/ 冷却（灰）。冷却时用置灰而不是 disable ——
+-- gui.set_enabled(false) 会连带隐藏子文本，冷却剩余秒数就永远看不见了。
+local COIN_BTN_COLOR = vmath.vector4(0.95, 0.55, 0.1, 1)
+local COIN_BTN_GREY  = vmath.vector4(0.34, 0.34, 0.38, 1)
+
+local function refresh_coin_btn(self)
+    -- 只负责文案与配色，可见性由调用方决定（已用掉/无渠道要整个隐藏）
+    local cd = self.coin_cd or 0
+    if cd > 0 then
+        gui.set_text(self.go_coin_text, "冷却中 " .. tostring(cd) .. " 秒")
+        gui.set_color(self.go_coin_btn, COIN_BTN_GREY)
+    else
+        gui.set_text(self.go_coin_text, "看广告 +50 金币")
+        gui.set_color(self.go_coin_btn, COIN_BTN_COLOR)
+    end
+end
+
+local ITEM_NAMES = { { id = "shield", name = "护盾" }, { id = "magnet", name = "磁铁" }, { id = "rocket", name = "火箭靴" } }
+
+-- 本局生效道具指示（护盾/磁铁/火箭靴）；flash 用于「护盾生效」这类短提示
+local function refresh_items(self)
+    local parts = {}
+    if self.flash then
+        parts[1] = self.flash
+    else
+        for _, it in ipairs(ITEM_NAMES) do
+            if self.items[it.id] then parts[#parts + 1] = it.name end
+        end
+    end
+    local text = table.concat(parts, "  ")
+    gui.set_text(self.item_line, text)
+    gui.set_enabled(self.item_line, text ~= "")
+end
+
+function init(self)
+    self.score = gui.get_node("score")
+    self.best = gui.get_node("best")
+    self.coin_label = gui.get_node("coin_label")
+    self.item_line = gui.get_node("item_line")
+    self.root = gui.get_node("gameover_root")
+    self.go_height = gui.get_node("go_height")
+    self.go_best = gui.get_node("go_best")
+    self.go_coin = gui.get_node("go_coin")
+    self.revive_root = gui.get_node("revive_root")
+    self.revive_height = gui.get_node("revive_height")
+    self.start_boost_btn = gui.get_node("start_boost_btn")
+    self.go_ad_btn = gui.get_node("go_ad_btn")
+    self.go_coin_btn = gui.get_node("go_coin_btn")
+    self.go_coin_text = gui.get_node("go_coin_text")
+    self.run_coin = 0
+    self.wallet = 0
+    self.coin_cd = 0
+    self.ad_ok = true
+    self.items = {}
+    self.flash = nil
+    gui.set_enabled(self.item_line, false)
+end
+
+function update(self, dt)
+    -- 冷却倒计时本地走秒（会话层是权威闸门，这里只负责让「冷却中 N 秒」真的在跳）
+    if (self.coin_cd or 0) > 0 then
+        self.cd_acc = (self.cd_acc or 0) + dt
+        if self.cd_acc >= 1 then
+            self.cd_acc = 0
+            self.coin_cd = math.max(0, self.coin_cd - 1)
+            refresh_coin_btn(self)
+        end
+    end
+    if self.flash_t then
+        self.flash_t = self.flash_t - dt
+        if self.flash_t <= 0 then
+            self.flash_t = nil
+            self.flash = nil
+            refresh_items(self)
+        end
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("items") then
+        -- 本局携带的道具（开局由 world 下发；护盾消耗时带 flash 提示）
+        self.items = {
+            shield = message.shield == true,
+            magnet = message.magnet == true,
+            rocket = message.rocket == true,
+        }
+        if message.flash then
+            self.flash = message.flash
+            self.flash_t = 1.4
+        end
+        refresh_items(self)
+    elseif message_id == hash("height") then
+        gui.set_text(self.score, tostring(message.value) .. " m")
+    elseif message_id == hash("best") then
+        gui.set_text(self.best, "最佳 " .. tostring(message.value) .. " m")
+    elseif message_id == hash("coin") then
+        self.run_coin = message.value or 0
+        gui.set_text(self.coin_label, "金币 " .. tostring(self.run_coin))
+    elseif message_id == hash("wallet") then
+        -- 局外累计金币（bootstrap 记账后推送）
+        self.wallet = message.value or 0
+        refresh_coin_line(self)
+    elseif message_id == hash("revive_offer") then
+        -- 死亡瞬间：弹复活面板（看广告复活 / 放弃）
+        print("HUD_REVIVE_OFFER height=" .. tostring(message.height))
+        gui.set_text(self.revive_height, "高度 " .. tostring(message.height) .. " m")
+        gui.set_enabled(self.revive_root, true)
+    elseif message_id == hash("revive_done") then
+        gui.set_enabled(self.revive_root, false)
+    elseif message_id == hash("game_over") then
+        print("HUD_GAME_OVER_SHOWN height=" .. tostring(message.height) .. " best=" .. tostring(message.best)
+            .. " coin=" .. tostring(message.coin or 0) .. " wallet=" .. tostring(message.wallet or 0)
+            .. " ad_ok=" .. tostring(message.ad_ok) .. " cd=" .. tostring(message.coin_cd or 0))
+        gui.set_enabled(self.revive_root, false)
+        gui.set_enabled(self.start_boost_btn, false)   -- 双保险：开局双倍按钮不残留在结算面板上
+        gui.set_text(self.go_height, "高度 " .. tostring(message.height) .. " m")
+        local best_line = "最佳 " .. tostring(message.best) .. " m"
+        if message.record then best_line = "新纪录！" .. best_line end
+        gui.set_text(self.go_best, best_line)
+        self.run_coin = message.coin or 0
+        self.wallet = message.wallet or self.wallet or 0
+        self.coin_cd = message.coin_cd or 0
+        refresh_coin_line(self)
+
+        -- 广告门控：渠道不可用就不显示入口（不留死按钮）
+        self.ad_ok = message.ad_ok ~= false
+        if self.ad_ok then
+            gui.set_enabled(self.go_ad_btn, true)
+            -- 冷却中也显示按钮，只是置灰 + 显示剩余秒数（点了不重开，见 world.on_input）
+            gui.set_enabled(self.go_coin_btn, true)
+        else
+            gui.set_enabled(self.go_ad_btn, false)
+            gui.set_enabled(self.go_coin_btn, false)
+        end
+        refresh_coin_btn(self)
+
+        gui.set_enabled(self.root, true)
+        gui.set_text(self.best, "最佳 " .. tostring(message.best) .. " m")
+    elseif message_id == hash("go_coin") then
+        -- 结算金币变动（×3 / +50）后刷新面板数字，避免面板继续显示旧值
+        self.run_coin = message.value or 0
+        refresh_coin_line(self)
+    elseif message_id == hash("coin_cd") then
+        -- 金币补充进入冷却（含冷却中被点的情况）
+        self.coin_cd = message.seconds or 0
+        refresh_coin_btn(self)
+    elseif message_id == hash("go_ad_done") then
+        -- 翻倍广告用掉：隐藏按钮，防止重复点击
+        gui.set_enabled(self.go_ad_btn, false)
+    elseif message_id == hash("go_coin_done") then
+        gui.set_enabled(self.go_coin_btn, false)
+    elseif message_id == hash("start_offer") then
+        -- 开局双倍广告按钮：显示（5 秒后由 world 通知隐藏）
+        gui.set_enabled(self.start_boost_btn, true)
+    elseif message_id == hash("start_offer_hide") then
+        gui.set_enabled(self.start_boost_btn, false)
+    elseif message_id == hash("restart") then
+        gui.set_enabled(self.root, false)
+        gui.set_enabled(self.revive_root, false)
+        gui.set_enabled(self.start_boost_btn, false)
+        -- 新一局：结算面板按钮按门控/冷却恢复（上一局可能因已使用被隐藏）
+        gui.set_enabled(self.go_ad_btn, self.ad_ok)
+        gui.set_enabled(self.go_coin_btn, self.ad_ok)
+        self.run_coin = 0
+        refresh_coin_line(self)
+    end
+end

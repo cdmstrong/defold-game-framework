@@ -99,10 +99,10 @@ def main():
         if not apps: raise RuntimeError('Run bundle-desktop first')
         stage=os.environ.get('M1_AUTOTEST')
         if stage=='1':
-            # M1 autotest lives in examples/ui_demo; force that entry regardless
+            # M1 autotest lives in templates/ui-demo; force that entry regardless
             # of the project's current main_collection (miner is the default).
             run([str(apps[0]),str(apps[0].parents[1]/'Resources/game.projectc'),
-                 '--config=bootstrap.main_collection=/examples/ui_demo/main.collectionc',
+                 '--config=bootstrap.main_collection=/templates/ui-demo/main.collectionc',
                  '--config=m1.autotest=1'],ROOT/'logs/m1/desktop-runtime.log', timeout=300, cwd=apps[0].parents[1]/'Resources')
             text=(ROOT/'logs/m1/desktop-runtime.log').read_text()
             for marker in ['M1_INTEGRATION_PASS cycles=30','M1_SHUTDOWN listeners=0']:

@@ -1,0 +1,84 @@
+animations {
+  id: "platform"
+  images {
+    image: "/assets/images/objects/platform.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "mushroom"
+  images {
+    image: "/assets/images/objects/mushroom.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "fragile"
+  images {
+    image: "/assets/images/objects/fragile.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "plant_red"
+  images {
+    image: "/assets/images/objects/plant_red.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "plant_yellow"
+  images {
+    image: "/assets/images/objects/plant_yellow.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "plant_blue"
+  images {
+    image: "/assets/images/objects/plant_blue.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "rock"
+  images {
+    image: "/assets/images/objects/rock.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "bird"
+  images {
+    image: "/assets/images/objects/bird.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+animations {
+  id: "coin"
+  images {
+    image: "/assets/images/objects/coin.png"
+    sprite_trim_mode: SPRITE_TRIM_MODE_OFF
+  }
+  playback: PLAYBACK_NONE
+  fps: 60
+}
+margin: 0
+extrude_borders: 2
+inner_padding: 0

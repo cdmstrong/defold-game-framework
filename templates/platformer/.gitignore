@@ -1,0 +1,11 @@
+/.internal
+/build
+/dist
+/.tools
+/logs
+*.pyc
+.DS_Store
+/.editor_settings
+.workbuddy/
+screenshot.png
+logs/

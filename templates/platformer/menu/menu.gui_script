@@ -1,0 +1,83 @@
+-- 主页（独立场景）：标题 / 最高纪录 / 金币余额 / 道具商店 / 开始游戏。
+-- 只负责展示与点击转发；金币扣减、道具入账、场景切换全部由 session.script 处理。
+-- 输入：menu 是 collection proxy 场景，内部脚本（gui_script 和普通 .script 都一样）
+-- 无法自己 acquire_input_focus（实测引擎 1.14.1 会丢弃），所以输入由常驻会话层
+-- session.script 持有焦点，经 session_input 消息转发到本脚本处理。
+
+local ITEMS = { "shield", "magnet", "rocket" }
+local PRICE = { shield = 30, magnet = 50, rocket = 80 }
+local COLOR_BUY = vmath.vector4(0.18, 0.68, 0.40, 1)
+local COLOR_LACK = vmath.vector4(0.30, 0.34, 0.42, 1)
+
+-- init 会用到，必须声明在上方
+local function refresh(self, data)
+    if data.coins then self.coins = data.coins end
+    if data.best then self.best = data.best end
+    if data.items then self.items = data.items end
+    gui.set_text(self.best_node, "最高 " .. tostring(self.best or 0) .. " m")
+    gui.set_text(self.coin_node, "金币 " .. tostring(self.coins or 0))
+    for _, id in ipairs(ITEMS) do
+        gui.set_text(self.own[id], "持有 " .. tostring(self.items[id] or 0))
+        local affordable = (self.coins or 0) >= PRICE[id]
+        gui.set_color(self.buy[id], affordable and COLOR_BUY or COLOR_LACK)
+    end
+end
+
+-- 输入处理本体（由 session 转发），判定用 gui.pick_node，不再手写屏幕坐标区间
+local function handle_input(self, action_id, action)
+    if action_id ~= hash("touch") or not action.pressed then return false end
+    if gui.pick_node(self.start_btn, action.x, action.y) then
+        if self.session then msg.post(self.session, "start_request") end
+        return true
+    end
+    for _, id in ipairs(ITEMS) do
+        if gui.pick_node(self.buy[id], action.x, action.y) then
+            if self.session then msg.post(self.session, "buy", { id = id }) end
+            return true
+        end
+    end
+    return false
+end
+
+function init(self)
+    self.root = gui.get_node("menu_root")
+    self.best_node = gui.get_node("best")
+    self.coin_node = gui.get_node("coin")
+    self.start_btn = gui.get_node("start_btn")
+    self.toast = gui.get_node("toast")
+    self.own, self.buy = {}, {}
+    for _, id in ipairs(ITEMS) do
+        self.own[id] = gui.get_node(id .. "_own")
+        self.buy[id] = gui.get_node(id .. "_buy")
+    end
+    self.coins, self.best, self.items = 0, 0, {}
+    self.session = _G.SKY_SESSION   -- 会话层 URL（全局注入，免猜集合路径）
+    self.toast_t = nil
+    gui.set_enabled(self.toast, false)
+    print("MENU_INIT session=" .. tostring(self.session ~= nil))
+    if self.session then msg.post(self.session, "menu_ready") end
+end
+
+function update(self, dt)
+    if self.toast_t then
+        self.toast_t = self.toast_t - dt
+        if self.toast_t <= 0 then
+            self.toast_t = nil
+            gui.set_enabled(self.toast, false)
+        end
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("session_input") then
+        -- session（主集合）转发的用户输入
+        handle_input(self, message.action_id, message)
+    elseif message_id == hash("menu_state") then
+        -- 会话层下发的经济状态（金币/最高/持有量）
+        refresh(self, message)
+    elseif message_id == hash("toast") then
+        gui.set_text(self.toast, message.text or "")
+        gui.set_enabled(self.toast, true)
+        self.toast_t = 1.2
+    end
+end

@@ -1,0 +1,812 @@
+-- 无限攀爬（竖屏）：屏幕空间模拟，不用 Box2D。
+-- 世界高度 h 向上无限增长；cam 为当前屏幕底端对应的世界高度。
+-- 所有对象每帧按 (h - cam) 重设屏幕坐标；玩家 GO 只承担视觉（动画由本脚本驱动）。
+--
+-- 难度随高度递增：平台间距变大、宽度变窄；移动平台 >80m、蘑菇弹台 >50m、
+-- 易碎平台 >180m、食人花 >120m、落石 >40m、尖刺飞鸟 >120m、金币平台全高度 15%。
+-- 死亡：跌出屏幕底部 或 撞到落石/食人花/尖刺飞鸟。
+-- 会话通信：本场景由 main.collection 的 game_proxy 载入，session.script 下发 session_url；
+-- 存档/经济/广告一律转发给会话层，本脚本只关心玩法。
+
+local SCREEN_W, SCREEN_H = 540, 960
+local GRAVITY = -2400
+local BOUNCE = 1200
+local MUSHROOM_BOUNCE = 1800
+local MAX_FALL = -1500
+local MOVE_SPEED = 430
+local KILL_BELOW = -80          -- 玩家屏幕坐标低于此值死亡
+local BASE_H = 140              -- 起始平台世界高度（0 米线）
+local METER = 64                -- 1 米 = 1 个瓦片
+-- autotest 目标高度：取「本次会话最佳」而非单局连续高度（死亡会重置 height，
+-- 要求单局连续 300m 等于要求机器人零失误，实际不可达）。可用 --config 覆盖。
+local AUTOTEST_TARGET = tonumber(sys.get_config_string("climber.autotest_target", "150")) or 150
+
+local AUTOTEST = sys.get_config_string("climber.autotest", "") == "1"
+local MOCK_DEATH = sys.get_config_string("climber.mock_death", "") == "1"  -- 调试：3 秒后强制死亡，验证结束面板
+
+local function lerp(a, b, t) return a + (b - a) * t end
+local function clamp(v, lo, hi) if v < lo then return lo elseif v > hi then return hi end return v end
+local function progress(m, span) return clamp(m / span, 0, 1) end
+local function difficulty(m)
+    return {
+        gap = lerp(150, 250, progress(m, 400)),
+        half_w = lerp(88, 52, progress(m, 300)),
+        mushroom = m > 50 and 0.12 or 0,
+        fragile = m > 180 and 0.22 or 0,
+        moving = m > 80 and (0.10 + 0.25 * progress(m, 400)) or 0,
+        plant = m > 120 and 0.20 or 0,
+        coin = 0.15,                                  -- 金币平台全高度 15%
+        rock_interval = m > 40 and lerp(5.5, 2.8, progress(m, 500)) or nil,  -- 落石 >40m 出现
+        rock_speed = 320 + math.min(420, m * 1.4),
+        bird_interval = m > 120 and lerp(6.0, 3.2, progress(m - 120, 400)) or nil,  -- 尖刺飞鸟间隔
+    }
+end
+
+-- 生成平台（含类型判定与食人花挂载）
+-- 贴图基准：normal/moving 用 64x64 实心方块，按 half_w/32 横向拉伸，使视觉宽度与判定宽度一致；
+-- mushroom（伞盖顶 +14、宽约 56）与 fragile（窄柱、顶 +26、宽约 48）为固定道具图，不拉伸。
+local function spawn_platform(self, x, h, kind, half_w)
+    local url = factory.create("#platform_factory", vmath.vector3(x, h - self.cam, 0.5))
+    local p = { url = url, x = x, h = h, half_w = half_w, kind = kind, die_t = nil, move = nil, has_plant = false, coins = nil }
+    -- moving 平台复用普通平台贴图；mushroom/fragile 有专属动画
+    local anim = (kind == "normal" or kind == "moving") and "platform" or kind
+    sprite.play_flipbook(msg.url(nil, url, "sprite"), hash(anim))
+    if kind == "normal" or kind == "moving" then
+        -- 只拉伸 sprite 组件，不用 go.set_scale：GO 缩放会传给子节点（金币/食人花挂在平台下），
+        -- 导致金币被横向拉伸、局部偏移被放大，拾取判定与视觉对不上。
+        go.set(msg.url(nil, url, "sprite"), "scale", vmath.vector3(half_w / 32, 1, 1))
+    end
+    self.platforms[#self.platforms + 1] = p
+    return p
+end
+
+-- 从平台弹起、回落到 dy 高度时能横移多远（BOUNCE 初速 + MOVE_SPEED 横移）。
+-- 生成器必须按这个约束落点：否则会生成「跨不过去」的下一块平台，
+-- 玩家只能站在原平台无限弹跳，直到被落石砸死（autotest 就在 70~140m 反复撞这个坑）。
+local function reach_dx(dy)
+    local g = -GRAVITY
+    local disc = BOUNCE * BOUNCE - 2 * g * dy
+    if disc <= 0 then return 0 end
+    local t = (BOUNCE + math.sqrt(disc)) / g
+    return MOVE_SPEED * t * 0.85   -- 留 15% 余量给操作误差
+end
+
+local function generate(self)
+    local d = difficulty(self.height)
+    while self.next_spawn_h < self.cam + SCREEN_H + 400 do
+        -- 前 60m：平台落点围绕上一个平台收敛，避免开局死亡陷阱
+        local gap = d.gap + math.random(-25, 35)
+        local spread = math.min(self.height < 60 and 220 or (SCREEN_W - 140), reach_dx(gap))
+        spread = math.max(60, spread)
+        local x = clamp(self.last_gen_x + math.random(-math.floor(spread), math.floor(spread)), 70, SCREEN_W - 70)
+        local kind, roll = "normal", math.random()
+        if roll < d.mushroom then kind = "mushroom"
+        elseif roll < d.mushroom + d.fragile then kind = "fragile"
+        elseif roll < d.mushroom + d.fragile + d.moving then kind = "moving" end
+        -- fragile 是窄柱道具图（内容半宽约 15），不能按普通平台给宽度，否则悬空也能踩住
+        local half_w = (kind == "mushroom") and 28 or ((kind == "fragile") and 15 or (d.half_w + math.random(-10, 10)))
+        local p = spawn_platform(self, x, self.next_spawn_h, kind, half_w)
+        if kind == "moving" then
+            p.move = { base_x = x, range = math.random(70, 130), speed = math.random(12, 20) / 10, phase = math.random() * math.pi * 2 }
+        end
+        if (kind == "normal" or kind == "moving") and math.random() < d.plant then
+            local anims = { "plant_red", "plant_yellow", "plant_blue" }
+            -- 与金币同样按「局部坐标」创建：keep_world_position=false 会把这个 transform 原样保留为局部值，
+            -- 若写成屏幕坐标会被父平台再叠加一次（旧版落点 = 2*(h-cam)+30，植物飘在天上，
+            -- 而致死判定仍在平台位置 → 看不见的杀手）。
+            local purl = factory.create("#plant_factory", vmath.vector3(0, 30, 0.1))
+            msg.post(purl, "set_parent", { parent_id = p.url, keep_world_position = false })
+            sprite.play_flipbook(msg.url(nil, purl, "sprite"), hash(anims[math.random(3)]))
+            p.has_plant = true
+        elseif kind == "normal" and math.random() < d.coin then
+            -- 金币平台：15% 概率，含 1-3 枚金币（挂为平台子节点，随平台一起删除/移动）
+            p.coins = {}
+            local n = math.random(1, 3)
+            for i = 1, n do
+                local cx = x + (i - (n + 1) / 2) * 34
+                -- 先按局部坐标创建（临时落在错误世界位置），set_parent keep_world_position=false
+                -- 保留 position 数值作为局部坐标 → 最终世界位置 = 平台位置 + 局部偏移，正好正确
+                local curl = factory.create("#coin_factory", vmath.vector3(cx - x, 60, 0.15))
+                msg.post(curl, "set_parent", { parent_id = p.url, keep_world_position = false })
+                p.coins[#p.coins + 1] = { url = curl, x = cx, taken = false }
+            end
+        end
+        self.next_spawn_h = self.next_spawn_h + gap
+        self.last_gen_x = x
+    end
+end
+
+local function to_session(self, message_id, data)
+    -- 会话层 URL 由 start_game 注入；注入前（首帧）静默丢弃，避免 msg.post(nil) 报错
+    if self.session then msg.post(self.session, message_id, data) end
+end
+
+local function die(self, cause)
+    if self.state ~= "play" then return end
+    -- 护盾（道具，一次性）：抵掉这一次致死，2.5 秒无敌；掉出画面时抬回安全高度
+    if (self.shield or 0) > 0 then
+        self.shield = 0
+        self.invuln = 2.5
+        local pl = self.player
+        if pl.h - self.cam < 160 then
+            local safe_h = self.cam + 220
+            spawn_platform(self, pl.x, safe_h, "normal", 80)
+            pl.h = safe_h + 40
+        end
+        pl.vy = BOUNCE * 0.6
+        msg.post(self.hud, "items", { shield = false, magnet = self.magnet, rocket = self.rocket, flash = "护盾生效" })
+        print("WORLD_SHIELD_SAVE height=" .. self.height)
+        return
+    end
+    if (self.invuln or 0) > 0 then return end   -- 无敌帧内不再判定伤害
+    self.state = "dead"
+    -- 开局双倍按钮可能还在倒计时（它的计时在 play 态 update 里减，死亡后不再走），
+    -- 不清掉会一直挂在复活/结算面板上。本局已结束，倍率也不再有意义。
+    self.offer_timer = nil
+    msg.post(self.hud, "start_offer_hide")
+    print("WORLD_DIED height=" .. self.height .. " cause=" .. tostring(cause or "?") .. " attempt=" .. tostring(self.attempts))
+    if self.autotest then
+        self.attempts = self.attempts + 1
+        print("WORLD_AUTOTEST_DIED height=" .. self.height .. " cause=" .. tostring(cause or "?"))
+        local pl = self.player
+        local ctx = string.format("WORLD_AUTOTEST_CTX x=%.0f h=%.0f vy=%.0f vx=%.0f plats=%d", pl.x, pl.h, pl.vy, pl.vx or 0, #self.platforms)
+        for _, r in ipairs(self.rocks) do
+            if math.abs(r.x - pl.x) < 140 and math.abs(r.h - pl.h) < 200 then
+                ctx = ctx .. string.format(" rock(dx=%.0f dy=%.0f)", r.x - pl.x, r.h - pl.h)
+            end
+        end
+        print(ctx)
+        if self.attempts >= 25 then
+            print("WORLD_AUTOTEST_GIVEUP attempts=25 best=" .. tostring(self.best_run or 0))
+            to_session(self, "game_over", { height = self.height, coin = self.coins })
+            sys.exit(0)   -- 旧写法 msg.post("@system:","exit") 在 1.14 需要 code 字段，会报错并中断后续状态设置
+            self.state = "dead"
+            return
+        end
+        reset(self)
+    else
+        if self.revive_used or not self.ad_ok then
+            -- 复活已用过 / 渠道没有可用广告：直接进结算，不弹无效面板
+            gameover(self)
+        else
+            -- 非 autotest：弹复活面板，等待用户选择（看广告复活 / 放弃）
+            msg.post(self.hud, "revive_offer", { height = self.height })
+        end
+    end
+end
+
+-- 原地复活：保留已爬高度与平台，把玩家放到当前 cam 上方一个安全落脚点续玩
+local function revive(self)
+    local pl = self.player
+    self.revive_used = true   -- 每局限 1 次，重置时清空
+    pl.x = SCREEN_W / 2
+    pl.vy = 0
+    -- 在当前 cam 上方放一个临时安全平台，避免复活即坠亡
+    local safe_h = self.cam + 160
+    pl.h = safe_h + 40
+    spawn_platform(self, pl.x, safe_h, "normal", 90)
+    self.state = "play"
+    self.rock_timer = 3      -- 复活后给 3 秒无威胁缓冲
+    self.bird_timer = 4
+    msg.post(self.hud, "revive_done")
+    print("WORLD_REVIVE height=" .. self.height .. " coin=" .. self.coins)
+end
+
+-- 注意：用全局函数而非 local function —— die() 在文件更上方会调用它，
+-- local 声明在调用点之后会被解析成全局 nil（同 bootstrap 里 handle_ad_result 的坑）。
+function gameover(self)
+    if self.state ~= "dead" then return end
+    self.state = "gameover"
+    -- 记账交给会话层（金币入账 / 最高度 / 广告冷却），回包 over_info 后再刷新结算面板
+    if self.session then
+        to_session(self, "game_over", { height = self.height, coin = self.coins })
+    else
+        msg.post(self.hud, "game_over", {
+            height = self.height, best = self.height, coin = self.coins,
+            wallet = self.coins, ad_ok = self.ad_ok, coin_cd = 0,
+        })
+    end
+end
+
+function reset(self)
+    for _, p in ipairs(self.platforms or {}) do pcall(go.delete, p.url, true) end
+    for _, r in ipairs(self.rocks or {}) do pcall(go.delete, r.url) end
+    for _, b in ipairs(self.birds or {}) do pcall(go.delete, b.url) end
+    self.platforms, self.rocks, self.birds = {}, {}, {}
+    self.state = "play"
+    self.cam = 0
+    self.time = 0
+    self.height = 0
+    self.last_meter = -1
+    self.attempts = (self.attempts or 0)
+    self.rock_timer = 4
+    self.bird_timer = 6
+    self.coins = 0   -- 本局收集金币数
+    self.coin_mult = 1   -- 本局金币倍率（开局双倍广告可 ×2）
+    self.revive_used = false   -- 本局是否已用过复活（广告复活每局限 1 次）
+    self.double_used = false   -- 本局是否已用过结算翻倍
+    self.coin_used = false     -- 本局是否已用过结算金币补充
+    -- 道具（开局由会话层消耗并下发，一次性，只在本局生效）
+    self.shield, self.magnet, self.rocket, self.invuln = 0, false, false, 0
+    msg.post(self.hud, "items", { shield = false, magnet = false, rocket = false })
+    self.dbg_t = nil           -- 清空调试打印基准，避免重置后日志时间戳看起来像未重置
+    self.ai_target = nil       -- autotest 当前锁定平台（重置后必须清，否则会追着已删除的平台跑）
+    self.ai_dodge = nil        -- autotest 落石躲避记忆
+    self.player = { x = SCREEN_W / 2, h = BASE_H + 80, prev_h = BASE_H + 80, vy = 0 }
+    self.next_spawn_h = BASE_H + 180
+    self.last_gen_x = SCREEN_W / 2
+    spawn_platform(self, SCREEN_W / 2, BASE_H, "normal", 120)
+    self.anim = nil
+    sprite.play_flipbook(self.player_sprite, hash("idle"))
+    -- 开局双倍广告按钮：显示 5 秒，点击或超时后隐藏（须在 restart 之后发送，restart 会隐藏它）
+    msg.post(self.hud, "restart")
+    if self.ad_ok then
+        self.offer_timer = 5
+        msg.post(self.hud, "start_offer")
+    else
+        self.offer_timer = nil
+        msg.post(self.hud, "start_offer_hide")
+    end
+    msg.post(self.hud, "height", { value = 0 })
+    msg.post(self.hud, "coin", { value = 0 })
+end
+
+-- 平台顶面世界高度（按贴图实际内容，与弹跳判定保持一致）
+local function platform_top(p)
+    return p.h + ((p.kind == "mushroom") and 14 or ((p.kind == "fragile") and 26 or 30))
+end
+
+-- 以初速 v 起跳、上升到 dy 高度后「回落穿越」该高度所需时间。
+-- 弹跳判定只在下落段生效（vy<=0），所以水平位移窗口按这个时间算。
+local function descend_time(v, dy)
+    local g = -GRAVITY
+    local disc = v * v - 2 * g * dy
+    if disc <= 0 then return nil end
+    return (v + math.sqrt(disc)) / g
+end
+
+-- 本局跳跃能力：火箭靴 +30%；蘑菇弹台的落地力更大，但那是落地瞬间决定的，不参与预算
+local function jump_speed(self)
+    return self.rocket and (BOUNCE * 1.3) or BOUNCE
+end
+
+-- 目标平台附近是否有食人花（挡在落点路径上 → 等于自杀，直接不选）
+local function plant_near(self, p)
+    for _, q in ipairs(self.platforms) do
+        if q.has_plant and not q.die_t
+            and math.abs(q.x - p.x) < 70 and math.abs(q.h - p.h) < 115 then
+            return true
+        end
+    end
+    return false
+end
+
+-- 上方候选平台：只有「真能落上去」的才算（旧版只按距离 <420 选，会锁死一个够不着的目标
+-- 反复弹回原位 → 70m 处的无限弹跳死循环）
+local function pick_above(self)
+    local pl = self.player
+    -- 用「当前上升速度」而不是标称弹跳速度：蘑菇弹台（1800）与火箭靴跳得更高，
+    -- 已被重力削过的速度也不能当成满速，否则会把够不着的平台当目标
+    local v = (pl.vy > 0) and pl.vy or jump_speed(self)
+    local apex = v * v / (2 * -GRAVITY)
+    local best, best_cost
+    for _, p in ipairs(self.platforms) do
+        if not p.die_t and not p.has_plant and not plant_near(self, p) then
+            local top = platform_top(p)
+            local dy = top - pl.h
+            if dy > 8 and dy < apex * 0.92 then
+                local t = descend_time(v, dy)
+                local dx = math.abs(p.x - pl.x)
+                -- 落地瞬间必须在平台判定宽度内；留 28% 余量（转向/减速损耗）
+                if t and dx <= MOVE_SPEED * t * 0.72 + p.half_w then
+                    -- 评分：高度收益为主，横向越远越不划算；砸掉正在塌的易碎柱略降权
+                    local cost = dy + dx * 1.2 + ((p.kind == "fragile") and 40 or 0)
+                    if not best_cost or cost < best_cost then best, best_cost = p, cost end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- 屏幕边缘修正：躲到墙角等于没躲（x 已被 clamp，再往外没有任何位移）
+local function edge_safe(self, dir)
+    local pl = self.player
+    if dir > 0 and pl.x > SCREEN_W - 70 then return -1 end
+    if dir < 0 and pl.x < 70 then return 1 end
+    return dir
+end
+
+-- 下方候选平台：按「坠落时间内的横向可达性」筛，再取最近的可落脚点。
+-- 旧版只取垂直最近：平台在屏幕另一头时根本横移不过去，等于把玩家往空处带。
+local function pick_below(self)
+    local pl = self.player
+    local g = -GRAVITY
+    local near, near_d
+    local reach, reach_d
+    for _, p in ipairs(self.platforms) do
+        if not p.die_t and not p.has_plant then
+            local dy = pl.h - platform_top(p)
+            if dy > 0 and dy < 900 then
+                if not near_d or dy < near_d then near, near_d = p, dy end
+                -- 已在高速下落时，剩余时间比「从静止自由落体」更短，按当前速度解方程
+                local v0 = math.max(0, -(pl.vy or 0))
+                local t = (v0 + math.sqrt(v0 * v0 + 2 * g * dy)) / g
+                if math.abs(p.x - pl.x) <= MOVE_SPEED * t * 0.85 + p.half_w then
+                    if not reach_d or dy < reach_d then reach, reach_d = p, dy end
+                end
+            end
+        end
+    end
+    return reach or near
+end
+
+-- 落石躲避：按「相遇点」预判，而不是只看当前水平距离。
+-- 只看当前距离时，玩家正朝落石下方移动（或落石刚进入 95px 窗口）来不及让开；
+-- 方向也不能按「玩家在屏幕哪半边」定（旧版的 bug：在左半边时会朝落石躲）。
+local function rock_evade(self)
+    local pl = self.player
+    for _, r in ipairs(self.rocks) do
+        local dy = r.h - (pl.h + 50)
+        -- 玩家上升 + 落石下落，闭合速度远大于落石自身速度；用落石速度算会低估紧迫性
+        local closing = math.max(1, (pl.vy or 0) - r.vy)
+        local tv = dy / closing
+        if dy > -40 and dy < 1100 and tv < 1.6 and math.abs(r.x - pl.x) < 95 then
+            local dir = edge_safe(self, (r.x >= pl.x) and -1 or 1)
+            -- 记住这次躲避：躲开之后如果立刻回头找平台，会正好又走回落石下方
+            self.ai_dodge = { rock = r, dir = dir, t = self.time }
+            return dir
+        end
+    end
+    return nil
+end
+
+-- 尖刺飞鸟躲避：算相对速度的相遇时间，只在真的要撞上时让开（同向远离，不对冲）
+local function bird_evade(self)
+    local pl = self.player
+    for _, b in ipairs(self.birds) do
+        if math.abs(b.h - pl.h) < 105 then
+            local d = b.x - pl.x
+            local rel = b.dir * b.speed - (pl.vx or 0)
+            local t = (rel ~= 0) and (-d / rel) or 99
+            if math.abs(d) < 260 and ((t > 0 and t < 0.9) or math.abs(d) < 70) then
+                return edge_safe(self, (d >= 0) and -1 or 1)
+            end
+        end
+    end
+    return nil
+end
+
+-- 食人花躲避：贴脸时先让开（判定是 |dx|<40 且高度差 -62~48，这里留余量）
+local function plant_evade(self)
+    local pl = self.player
+    for _, p in ipairs(self.platforms) do
+        if p.has_plant and not p.die_t then
+            local dy = pl.h - p.h
+            if dy > -140 and dy < 160 and math.abs(pl.x - p.x) < 130 then
+                return edge_safe(self, (p.x >= pl.x) and -1 or 1)
+            end
+        end
+    end
+    return nil
+end
+
+-- autotest 自动寻路：保命（落石/飞鸟/食人花）→ 锁定一个可达平台 → 朝它横移
+local function autotest_dir(self)
+    local pl = self.player
+
+    -- 1) 保命优先：这几条是即时致死，先让开再谈爬高
+    --    躲避有「记忆」：落石还在头顶时一直保持在让开的一侧，不要一让开就回头撞上
+    local dodge = self.ai_dodge
+    if dodge then
+        local keep = false
+        for _, r in ipairs(self.rocks) do
+            if r == dodge.rock then
+                local dy = r.h - pl.h
+                -- 只在这块落石还在头顶附近、且躲避开始不超过 1.2 秒时继续躲；
+                -- 否则玩家已经落到落石下方很远（下落比落石快），再躲就是主动坠崖
+                if dy > -40 and dy < 700 and (self.time - (dodge.t or 0)) < 1.2 then keep = true end
+                break
+            end
+        end
+        if keep then return edge_safe(self, dodge.dir) end
+        self.ai_dodge = nil
+    end
+    local evade = rock_evade(self) or bird_evade(self) or plant_evade(self)
+    if evade then return evade end
+
+    -- 2) 一次弹跳只锁一个目标：飞行中反复改主意会两头落空
+    local tgt = self.ai_target
+    if tgt and (tgt.die_t or pl.h > platform_top(tgt) + 60) then tgt = nil end
+    if not tgt then
+        -- 下落中只能找下方落脚点；上升中优先往上，实在没有可达平台再往下兜底
+        if pl.vy > 0 then tgt = pick_above(self) end
+        if not tgt then tgt = pick_below(self) end
+    end
+    self.ai_target = tgt
+
+    if tgt then
+        local dx = tgt.x - pl.x
+        if math.abs(dx) < 12 then return 0 end
+        return dx > 0 and 1 or -1
+    end
+    -- 上下都没有落脚点（生成空档）：朝屏幕中间靠，等下一批平台
+    if pl.x < SCREEN_W / 2 - 30 then return 1 end
+    if pl.x > SCREEN_W / 2 + 30 then return -1 end
+    return 0
+end
+
+function init(self)
+    go.set_scale(0.4, "player")  -- 外星人贴图 128x256，缩到 51x102；GO 原点 = 脚底
+    self.player_sprite = msg.url("game:/player#sprite")
+    self.session = _G.SKY_SESSION   -- 会话层 URL（全局注入，免猜集合路径）
+    self.hud = msg.url("game:/hud#gui")
+    msg.post(self.hud, "restart")  -- 隐藏结束面板
+    self.key_dir, self.touch_dir = 0, 0
+    self.autotest = AUTOTEST
+    self.platforms, self.rocks, self.birds = {}, {}, {}
+    self.ad_ok = true      -- 先假定可用，收到 start_game 后按会话层能力校准
+    self.coin_cd_s = 0
+    reset(self)
+    to_session(self, "world_ready")   -- 报到：会话层据此下发本局道具
+    if self.autotest then print("WORLD_AUTOTEST enabled target=" .. AUTOTEST_TARGET) end
+    print("WORLD_FLAGS autotest=" .. tostring(AUTOTEST) .. " mock_death=" .. tostring(MOCK_DEATH))
+end
+
+function update(self, dt)
+    if self.state ~= "play" then return end
+    -- 广告播放期间冻结玩法（由 bootstrap 在广告 open/close 时通知）
+    if self.ad_paused then return end
+    if (self.invuln or 0) > 0 then self.invuln = self.invuln - dt end   -- 护盾生效后的无敌帧
+    self.time = self.time + dt
+    if MOCK_DEATH and self.time > 3 then die(self, "mock") end
+    -- 开局双倍按钮倒计时隐藏
+    if self.offer_timer then
+        self.offer_timer = self.offer_timer - dt
+        if self.offer_timer <= 0 then
+            self.offer_timer = nil
+            msg.post(self.hud, "start_offer_hide")
+        end
+    end
+    generate(self)  -- 程序化生成：保持玩家上方始终有平台
+    if self.autotest and self.time - (self.dbg_t or 0) > 2 then
+        self.dbg_t = self.time
+        print(string.format("WORLD_DEBUG t=%.0f h=%.0f cam=%.0f vy=%.0f x=%.0f plats=%d next=%.0f", self.time, self.player.h, self.cam, self.player.vy, self.player.x, #self.platforms, self.next_spawn_h))
+    end
+    local pl = self.player
+    local d = difficulty(self.height)
+
+    -- 输入方向（键盘 + 触屏 + autotest）
+    local dir = clamp(self.key_dir + self.touch_dir, -1, 1)
+    if self.autotest then dir = autotest_dir(self) end
+    pl.vx = MOVE_SPEED * dir
+
+    -- 物理：重力 + 位移（prev_h 供穿越判定）
+    pl.prev_h = pl.h
+    pl.vy = math.max(pl.vy + GRAVITY * dt, MAX_FALL)
+    pl.h = pl.h + pl.vy * dt
+    pl.x = clamp(pl.x + pl.vx * dt, 26, SCREEN_W - 26)
+
+    -- 平台：移动更新 + 底部回收 + 易碎倒计时
+    for i = #self.platforms, 1, -1 do
+        local p = self.platforms[i]
+        if p.move then
+            p.x = p.move.base_x + math.sin(self.time * p.move.speed + p.move.phase) * p.move.range
+        end
+        if p.die_t then
+            p.die_t = p.die_t - dt
+            if p.die_t <= 0 then
+                go.delete(p.url, true)
+                table.remove(self.platforms, i)
+            end
+        elseif p.h < self.cam - 200 then
+            go.delete(p.url, true)
+            table.remove(self.platforms, i)
+        end
+    end
+
+    -- 弹跳判定（下落中，脚底穿越平台顶面）
+    -- top 偏移按贴图实际内容：普通方块实心 64 高 → 顶面 +30；蘑菇伞盖 → +14；易碎柱 → +26
+    if pl.vy <= 0 then
+        for _, p in ipairs(self.platforms) do
+            if not p.die_t then
+                local top_off = (p.kind == "mushroom") and 14 or ((p.kind == "fragile") and 26 or 30)
+                local top = p.h + top_off
+                if pl.prev_h >= top and pl.h <= top and math.abs(pl.x - p.x) <= p.half_w + 8 then
+                    -- 火箭靴：弹跳力 +30%（蘑菇弹台保持原样）
+                    local jump = (self.rocket and math.floor(BOUNCE * 1.3)) or BOUNCE
+                    pl.vy = (p.kind == "mushroom") and MUSHROOM_BOUNCE or jump
+                    pl.h = top
+                    self.ai_target = nil   -- 落地即解锁：下一次弹跳重新选点
+                    if p.kind == "fragile" then p.die_t = 0.3 end
+                    break
+                end
+            end
+        end
+    end
+
+    -- 金币收集：玩家碰到金币即收；带磁铁时吸附范围大幅提升
+    local pick_x = self.magnet and 190 or 44
+    local pick_y = self.magnet and 170 or 60
+    for _, p in ipairs(self.platforms) do
+        if p.coins then
+            for _, c in ipairs(p.coins) do
+                if not c.taken then
+                    if math.abs(pl.x - c.x) < pick_x and math.abs(pl.h - (p.h + 60)) < pick_y then
+                        c.taken = true
+                        -- 金币×2 广告通过 coin_mult 生效（旧版只记了倍率没参与结算）
+                        self.coins = self.coins + (self.coin_mult or 1)
+                        go.delete(c.url)
+                        msg.post(self.hud, "coin", { value = self.coins })
+                        print("WORLD_COIN total=" .. self.coins)
+                    end
+                end
+            end
+        end
+    end
+
+    -- 落石：>40m 才生成 + 下落 + 碰撞致死 + 底部回收
+    if d.rock_interval then
+        self.rock_timer = self.rock_timer - dt
+        if self.rock_timer <= 0 then
+            self.rock_timer = d.rock_interval * (0.7 + math.random() * 0.6)
+            local url = factory.create("#rock_factory", vmath.vector3(math.random(40, SCREEN_W - 40), self.cam + SCREEN_H + 60, 0.7))
+            self.rocks[#self.rocks + 1] = { url = url, x = go.get_position(url).x, h = self.cam + SCREEN_H + 60, vy = -d.rock_speed }
+        end
+    end
+    for i = #self.rocks, 1, -1 do
+        local r = self.rocks[i]
+        r.h = r.h + r.vy * dt
+        if r.h < self.cam - 100 then
+            go.delete(r.url)
+            table.remove(self.rocks, i)
+        elseif not self.rocket and math.abs(r.x - pl.x) < 42 and math.abs(r.h - (pl.h + 50)) < 52 then
+            -- 火箭靴免疫落石：直接穿过（落石继续下落，不致死）
+            die(self, "rock")
+            return
+        end
+    end
+
+    -- 尖刺飞鸟：>120m 定时生成，横向飞过，碰撞致死，飞离屏幕回收
+    if d.bird_interval then
+        self.bird_timer = self.bird_timer - dt
+        if self.bird_timer <= 0 then
+            self.bird_timer = d.bird_interval * (0.7 + math.random() * 0.6)
+            local dir = math.random(2) == 1 and 1 or -1
+            local y = self.cam + SCREEN_H * (0.55 + math.random() * 0.35)  -- 屏幕中上部
+            local h = y  -- 世界高度（cam 是屏幕底端世界高度）
+            local bx = dir == 1 and -40 or (SCREEN_W + 40)
+            local url = factory.create("#bird_factory", vmath.vector3(bx, y, 0.8))
+            self.birds[#self.birds + 1] = { url = url, x = bx, h = h, dir = dir, speed = 240 + math.random() * 120 }
+            sprite.set_hflip(msg.url(nil, url, "sprite"), dir == 1)
+        end
+    end
+    for i = #self.birds, 1, -1 do
+        local b = self.birds[i]
+        b.x = b.x + b.dir * b.speed * dt
+        if b.x < -80 or b.x > SCREEN_W + 80 then
+            go.delete(b.url)
+            table.remove(self.birds, i)
+        elseif math.abs(b.x - pl.x) < 40 and math.abs(b.h - pl.h) < 46 then
+            die(self, "bird")
+            return
+        end
+    end
+
+    -- 食人花：随平台移动（父节点已挂），AABB 致死
+    for _, p in ipairs(self.platforms) do
+        if p.has_plant and not p.die_t then
+            if math.abs(pl.x - p.x) < 40 and math.abs((pl.h + 45) - (p.h + 38)) < 55 then
+                die(self, "plant")
+                return
+            end
+        end
+    end
+
+    -- 相机：只升不降，玩家越过屏幕 58% 高度时推 cam
+    if pl.h - self.cam > SCREEN_H * 0.58 then self.cam = pl.h - SCREEN_H * 0.58 end
+
+    -- 高度统计（1 米 = 1 瓦片）
+    local m = math.max(0, math.floor((pl.h - BASE_H) / METER))
+    if m ~= self.last_meter then
+        self.last_meter = m
+        self.height = m
+        self.best_run = math.max(self.best_run or 0, m)
+        msg.post(self.hud, "height", { value = m })
+    end
+    if self.autotest and self.height > 0 and self.height % 50 == 0 and self.height ~= self.autotest_logged then
+        self.autotest_logged = self.height
+        print("WORLD_AUTOTEST height=" .. self.height .. " platforms=" .. #self.platforms)
+    end
+    if self.autotest and (self.best_run or 0) >= AUTOTEST_TARGET then
+        print("WORLD_AUTOTEST_PASS best=" .. tostring(self.best_run) .. " attempt=" .. tostring(self.attempts))
+        to_session(self, "game_over", { height = self.height })
+        sys.exit(0)   -- 旧写法 msg.post("@system:","exit") 在 1.14 需要 code 字段，会报错并中断后续状态设置
+        self.state = "dead"
+        return
+    end
+
+    -- 跌出屏幕底部死亡；无敌帧内改为抬回画面（护盾刚触发时不连续坠亡）
+    if pl.h - self.cam < KILL_BELOW then
+        if (self.invuln or 0) > 0 then
+            local safe_h = self.cam + 220
+            spawn_platform(self, pl.x, safe_h, "normal", 80)
+            pl.h = safe_h + 40
+            pl.vy = BOUNCE * 0.6
+        else
+            die(self, "fall")
+            return
+        end
+    end
+
+    -- 渲染：全部对象按 (h - cam) 落到屏幕坐标
+    for _, p in ipairs(self.platforms) do
+        go.set_position(vmath.vector3(p.x, p.h - self.cam, 0.5), p.url)
+    end
+    for _, r in ipairs(self.rocks) do
+        go.set_position(vmath.vector3(r.x, r.h - self.cam, 0.7), r.url)
+    end
+    for _, b in ipairs(self.birds) do
+        go.set_position(vmath.vector3(b.x, b.h - self.cam, 0.8), b.url)
+    end
+    for _, p in ipairs(self.platforms) do
+        if p.coins then
+            for _, c in ipairs(p.coins) do
+                if not c.taken then
+                    -- 磁铁：金币向玩家横向吸附（视觉上"被吸过来"，而不是原地消失）
+                    if self.magnet then
+                        local dx = pl.x - c.x
+                        if math.abs(dx) < 260 then c.x = c.x + dx * math.min(1, dt * 6) end
+                    end
+                    -- 金币是平台子节点：用局部坐标渲染（z 0.15 + 父 0.5 = 世界 0.65）
+                    go.set_position(vmath.vector3(c.x - p.x, 60, 0.15), c.url)
+                end
+            end
+        end
+    end
+    go.set_position(vmath.vector3(pl.x, pl.h - self.cam, 1), "player")
+
+    -- 玩家动画
+    local anim = "idle"
+    if pl.vy > 150 then anim = "jump" elseif pl.vy < -150 then anim = "fall" end
+    if anim ~= self.anim then
+        self.anim = anim
+        sprite.play_flipbook(self.player_sprite, hash(anim))
+    end
+    sprite.set_hflip(self.player_sprite, pl.vx < 0)
+end
+
+-- 输入处理本体：session（主集合）持有输入焦点后经 session_input 消息转发进来。
+-- 注意：collection proxy 场景内的脚本（普通 .script 与 gui_script 都一样）无法自己
+-- acquire_input_focus（实测引擎 1.14.1 丢弃），所以这里不存在 on_input 回调。
+local function handle_input(self, action_id, action)
+    -- 按钮判定区域与 hud.gui 节点实际屏幕坐标对齐（GUI 左下原点，root y=480）：
+    --   复活按钮 revive_btn      屏幕 y 390~490
+    --   放弃按钮 revive_giveup   屏幕 y 270~350
+    --   结算翻倍 go_ad_btn       屏幕 y 320~420
+    --   结算+50  go_coin_btn     屏幕 y 245~325
+    --   开局双倍 start_boost_btn 屏幕 y 665~735
+    -- 死亡态：等待复活/放弃选择
+    if self.state == "dead" and not self.autotest then
+        if action_id == hash("touch") and action.pressed then
+            if action.y >= 390 and action.y <= 490 then
+                -- 复活按钮：发起激励视频（结果经会话层回传 revive_ok / revive_failed）
+                to_session(self, "ad_revive")
+            elseif action.y >= 270 and action.y <= 350 then
+                -- 放弃按钮
+                gameover(self)
+            end
+        end
+        return
+    end
+    -- 结算态：先判广告按钮，其余任意位置「返回主页」（不再原地重开，经济闭环回到商店）
+    if self.state == "gameover" and not self.autotest then
+        if action_id == hash("touch") and action.pressed then
+            local hit_ad = false
+            if action.y >= 320 and action.y <= 420 and self.ad_ok and not self.double_used then
+                to_session(self, "ad_double")
+                hit_ad = true
+            elseif action.y >= 245 and action.y <= 325 and self.ad_ok and not self.coin_used then
+                -- 冷却中按钮置灰但仍可见：吃掉这次点击但不重开（旧行为会误触「返回主页」）
+                if (self.coin_cd_s or 0) <= 0 then to_session(self, "ad_coin") end
+                hit_ad = true
+            end
+            if not hit_ad then to_session(self, "back_to_menu") end
+        end
+        return
+    end
+    if action_id == hash("left") then
+        self.key_dir = action.value > 0 and -1 or 0
+    elseif action_id == hash("right") then
+        self.key_dir = action.value > 0 and 1 or 0
+    elseif action_id == hash("touch") then
+        if action.pressed then
+            -- 开局双倍广告按钮（显示期间且渠道可用才可点）
+            if self.offer_timer and self.ad_ok and action.y >= 665 and action.y <= 735 then
+                self.offer_timer = nil
+                msg.post(self.hud, "start_offer_hide")
+                to_session(self, "ad_bonus")
+            else
+                self.touch_dir = (action.x < SCREEN_W / 2) and -1 or 1
+            end
+        elseif action.released then
+            self.touch_dir = 0
+        end
+    end
+end
+
+function on_message(self, message_id, message)
+    if message_id == hash("session_input") then
+        -- session（主集合）转发的用户输入（proxy 内脚本拿不到输入焦点，见 handle_input 注释）
+        handle_input(self, message.action_id, message)
+    elseif message_id == hash("start_game") then
+        -- 会话层下发：跨集合 URL + 本局已消耗的道具（一次性，只在本局生效）
+        self.session = message.session_url
+        local it = message.items or {}
+        self.shield = ((it.shield or 0) > 0) and 1 or 0
+        self.magnet = (it.magnet or 0) > 0
+        self.rocket = (it.rocket or 0) > 0
+        msg.post(self.hud, "items", { shield = self.shield > 0, magnet = self.magnet, rocket = self.rocket })
+        print("WORLD_ITEMS shield=" .. tostring(self.shield) .. " magnet=" .. tostring(self.magnet)
+            .. " rocket=" .. tostring(self.rocket))
+    elseif message_id == hash("over_info") then
+        -- 会话层记账完成：刷新结算面板（wallet 为入账后的累计）
+        self.ad_ok = message.ad_ok ~= false
+        self.coin_cd_s = message.coin_cd or 0
+        msg.post(self.hud, "game_over", {
+            height = self.height, best = message.best, record = message.record,
+            coin = self.coins, wallet = message.wallet,
+            ad_ok = self.ad_ok, coin_cd = self.coin_cd_s,
+        })
+    elseif message_id == hash("back_to_menu") then
+        to_session(self, "back_to_menu")
+    elseif message_id == hash("ad_revive") or message_id == hash("ad_bonus")
+        or message_id == hash("ad_double") or message_id == hash("ad_coin") then
+        -- 广告入口统一上抛会话层（RewardAd 服务在那里），结果再回传本脚本
+        to_session(self, message_id)
+    elseif message_id == hash("wallet") then
+        msg.post(self.hud, "wallet", { value = message.value })
+    elseif message_id == hash("restart") then
+        self.attempts = (self.attempts or 0) + 1
+        reset(self)
+    elseif message_id == hash("revive_ok") then
+        -- 广告成功：原地复活
+        if self.state == "dead" then revive(self) end
+    elseif message_id == hash("revive_failed") then
+        -- 广告失败/未看完：进入结算
+        if self.state == "dead" then gameover(self) end
+    elseif message_id == hash("coin_tripled") then
+        -- 结算翻倍：每局只能生效一次（重复点击不再叠加）
+        if not self.double_used then
+            local before = self.coins or 0
+            self.double_used = true
+            self.coins = before * 3
+            to_session(self, "wallet_add", { amount = self.coins - before })  -- 只补差额
+            msg.post(self.hud, "coin", { value = self.coins })
+            msg.post(self.hud, "go_coin", { value = self.coins })
+            msg.post(self.hud, "go_ad_done")   -- 按钮用掉即隐藏，避免重复点
+            print("WORLD_COIN_TRIPLED total=" .. self.coins)
+        end
+    elseif message_id == hash("coin_doubled") then
+        self.coin_mult = (self.coin_mult or 1) * 2
+        self.offer_timer = nil
+        msg.post(self.hud, "start_offer_hide")
+        print("WORLD_COIN_DOUBLED mult=" .. self.coin_mult)
+    elseif message_id == hash("coin_bonus") then
+        -- 结算金币补充：落账到本局面板并同步局外账户（会话层记账 + 120s 冷却）
+        local amount = message.amount or 50
+        self.coins = (self.coins or 0) + amount
+        self.coin_used = true
+        to_session(self, "wallet_add", { amount = amount })
+        msg.post(self.hud, "coin", { value = self.coins })
+        msg.post(self.hud, "go_coin", { value = self.coins })
+        msg.post(self.hud, "go_coin_done")
+        print("WORLD_COIN_BONUS total=" .. self.coins)
+    elseif message_id == hash("coin_cd") then
+        self.coin_cd_s = message.seconds or 0
+    elseif message_id == hash("ad_pause") then
+        self.ad_paused = true
+    elseif message_id == hash("ad_resume") then
+        self.ad_paused = false
+    end
+end

@@ -1,0 +1,24 @@
+{
+  "name": "miner",
+  "title": "经营 / 挂机参考实现（片段式）",
+  "skeleton": "fragments",
+  "status": "reference",
+  "entry": null,
+  "structure": {
+    "main.collection": "示例入口（把它换成新项目自己的 main.collection，或把这里的场景挂到你的 loader 下）",
+    "mine/ shop/ settings/ dialog/": "4 个业务场景 + 1 个通用对话框，各自带 collectionproxy 路由",
+    "bootstrap.go": "场景路由入口",
+    "context.lua": "示例内共享上下文"
+  },
+  "copy_into": "新项目的子目录（保持相对路径不变，否则 .collection / .go 里的引用会断）",
+  "requires": [
+    "framework 依赖（dependencies#0）",
+    "game_modules 依赖（tycoon 两层 UI，见 game_modules/tycoon）",
+    "assets/fonts（zh 字体 + ArialUnicode.ttf，约 22 MB，不在本仓库）",
+    "[bootstrap] main_collection 指向这里的 main.collection 才能独立跑"
+  ],
+  "notes": [
+    "片段式：没有自带 game.project，必须挂进一个已有项目才能编译",
+    "与 platformer 的 proxy 骨架是两种结构，别混用"
+  ]
+}

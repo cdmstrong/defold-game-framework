@@ -18,11 +18,15 @@
 在游戏仓库的 `game.project` 中声明：
 
 ```
-dependencies#0 = <本库的 zip 归档 URL>
+dependencies#0 = https://codeload.github.com/cdmstrong/defold-game-framework/zip/<fw-dist 分支的 commit sha>
 dependencies#1 = https://codeload.github.com/Insality/druid/zip/9a5171377fc2f7fba68fea4f2c117ee6a25d28a4
 dependencies#2 = https://codeload.github.com/britzl/monarch/zip/5c33c39830489925493163e741d5b22b4e5e3b9d
 dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497c25ff41d34ab1efdb1163217dc9dd26
 ```
+
+`dependencies#0` 的 sha 由 `python3 scripts/publish-framework.py` 打印，指向 `fw-dist` 分支的
+一次快照提交——那棵树只有 `game.project` + `framework/`，所以游戏侧真正「只用 framework」，
+不会拉到 `templates/`、`docs/`、`scripts/`。
 
 然后 `Fetch Libraries`。库内模块通过 `require "framework.xxx"` 使用。
 
@@ -30,11 +34,14 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
 
 ## 升级框架
 
-框架仓库发新 tag / 新 zip 归档 → 游戏仓库改 `dependencies#0` 的 URL → `Fetch Libraries`。
+改完 `framework/` → `git commit` → `python3 scripts/publish-framework.py`（自动更新并推送
+`fw-dist` 分支、打印新 URL）→ 游戏仓库改 `dependencies#0` 一行 → `Fetch Libraries`。
 
-## 导出库 ZIP
+## 导出库 ZIP（离线/自建分发用）
 
 `python3 scripts/export-libraries.py` 将 `framework/` 与 `game_modules/` 分别导出为独立的 Defold Library ZIP（`dist/libraries/`，已被 gitignore）。framework 版本号自动取自最新 `vX.Y.Z` git tag，保证 ZIP 版本与 tag 内容一致；产物清单（含 SHA-256）写入 `dist/libraries/manifest.json`。
+
+> `fw-dist` 分支与这里的 `defold-framework-*.zip` 内容等价，只是前者走 codeload、无需托管。
 
 ## 纯 Lua 单测
 
@@ -45,15 +52,16 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
 ```
 framework/                 ← 品类中立层（唯一被游戏依赖的运行时）
 game_modules/tycoon/       ← 经营类品牌层（只依赖 framework）
+templates/                 ← 游戏骨架（platformer 项目骨架 / miner 片段 / ui-demo），各带 template.json
 tests/lua/                 ← 纯 Lua 单测
-docs/                      ← 手册与设计/验证记录（creating-games.md 是新建游戏入口）
-scripts/                   ← 导出 ZIP / 隔离校验 / 依赖锁定（见 scripts/README.md）
-examples/                  ← 参考示例（miner 经营类 + ui_demo 组件演示）
+docs/                      ← 手册与设计/验证记录（README.md 是路由表，旧手册在 docs/bootstrap/）
+scripts/                   ← 发布 fw-dist / 导出 ZIP / 刷新模板快照 / 依赖锁定（见 scripts/README.md）
 ```
 
-**`examples/` 不参与导出**：`game.project` 的 `[library] include_dirs` 只含 `framework`，
-所以示例代码不会被依赖本库的游戏拉走，仅作仓库内参考与本地跑通验证。
+**`templates/` 不参与依赖**：`fw-dist` 分支只含 `game.project` + `framework/`，
+所以骨架代码不会被依赖本库的游戏拉走，仅作新项目的起点。
 
 > 历史上曾有一个并列的本地工作区 `game-framework/`（放示例、素材、构建产物，持有一份框架副本）。
 > 该工作区已废弃删除，其中的脚本、示例、设计文档均已并入本仓库。
-> 新建/调试游戏请直接建独立游戏仓库（见 `docs/creating-games.md`）。
+> 新建/调试游戏请直接建独立游戏仓库（新流程见 `framework/docs/project-bootstrap.md`，
+> 旧的手册见 `docs/bootstrap/creating-games.md`）。

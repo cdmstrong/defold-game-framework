@@ -2,9 +2,12 @@
 
 > 这是**跨项目通用模板**，不含任何游戏专属值；具体实例见
 > `/Users/chendongming/coding/auto-games/defold/platformer-game/AGENTS.md` 第 3 节。
-> 旧的《批量创建新游戏手册》在
-> `/Users/chendongming/coding/auto-games/defold/defold-game-framework/docs/creating-games.md`
-> （以 miner-game / `examples/<游戏名>/` 为模板），本 SOP 针对 `main.collection + collection proxy` 骨架。
+> 仓库内的骨架在 `templates/`（`platformer/` 完整项目骨架、`miner/` 片段式参考），
+> 每个模板带一份 `template.json` 声明骨架类型与需要改写的标识。
+> 旧的《批量创建新游戏手册》已移到
+> `/Users/chendongming/coding/auto-games/defold/defold-game-framework/docs/bootstrap/creating-games.md`
+> （以 miner-game / `examples/<游戏名>/` 为历史结构，`examples/` 现已更名 `templates/`），
+> 本 SOP 针对 `main.collection + collection proxy` 骨架。
 
 ## 0. 复用原则
 
