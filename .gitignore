@@ -1,0 +1,7 @@
+/.internal
+/build
+/.tools
+/logs
+/dist
+*.pyc
+.DS_Store
