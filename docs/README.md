@@ -1,17 +1,10 @@
-# Defold Game Studio 实施文档
+# Defold Game Framework 实施文档
 
-当前阶段：M0–M4 全部实现并验证；v1.1.0 完成一轮可用性修复（广告异步链路、存档错误
-语义、槽位分组、导航超时），修复详情见 [v1.1.0 修复验证记录](verification/v1.1.0-fixes.md)。
+当前阶段：v1.1.0 可用性修复已完成（广告异步链路、存档错误语义、槽位分组、导航超时），
+修复详情见 [v1.1.0 修复验证记录](verification/v1.1.0-fixes.md)。
 
-1. [工程架构与 V1 范围](architecture/architecture.md)
-2. [模块 API 合约](architecture/api-contracts.md)
-3. [任务顺序与验收](planning/implementation-plan.md)
-4. [候选依赖版本和 commit](planning/dependencies.json)
-5. [用户原始方案](references/studio-proposal.md)
-6. [批量创建新游戏手册](creating-games.md)
+1. [批量创建新游戏手册](creating-games.md)
+2. [两层 UI 与品类复用](architecture/two-layer-ui.md)
+3. [v1.1.0 修复验证记录](verification/v1.1.0-fixes.md)
 
-验证记录：[M0](verification/m0.md) · [M1](verification/m1.md) · [M2](verification/m2.md) ·
-[M3](verification/m3.md) · [M4](verification/m4.md) · [miner](verification/miner.md) ·
-[v1.1.0 修复](verification/v1.1.0-fixes.md)
-
-game.project 当前入口为 `examples/miner/main.collection`（挖矿大亨示例游戏）。
+本仓库是纯框架库（`framework/` + `game_modules/`），不含示例游戏；示例与开发工作区在本地 `game-framework/` 目录维护。库 ZIP 由 `scripts/export-libraries.py` 导出，framework 版本号跟随本仓库 git tag。

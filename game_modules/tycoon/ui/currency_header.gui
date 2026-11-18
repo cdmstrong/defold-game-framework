@@ -1,0 +1,5 @@
+fonts { name: "default" font: "/builtins/fonts/default.font" }
+material: "/builtins/materials/gui.material"
+max_nodes: 8
+nodes { id: "value" type: TYPE_TEXT position { x: 0 y: 20 z: 0 } size { x: 700 y: 45 z: 0 } color { x: 1 y: 0.85 z: 0.3 w: 1 } text: "0" font: "default" scale { x: 0.9 y: 0.9 z: 1 } }
+nodes { id: "income" type: TYPE_TEXT position { x: 0 y: -22 z: 0 } size { x: 700 y: 30 z: 0 } color { x: 0.5 y: 0.7 z: 0.5 w: 1 } text: "0 /s" font: "default" scale { x: 0.6 y: 0.6 z: 1 } }

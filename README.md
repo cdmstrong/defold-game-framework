@@ -11,6 +11,7 @@
 - `framework/data/` — 本地化（localization）
 - `framework/platform/` — 平台检测、激励视频广告（reward_ad，taptap/233/mock/none provider）、广告日志
 - `framework/analytics/` — 埋点（analytics）
+- `game_modules/tycoon/ui/` — 经营类 UI 品牌层（货币栏 GUI 模板 + 绑定、升级列表绑定，0.1.0），只依赖 `framework`，见 [两层 UI 说明](docs/architecture/two-layer-ui.md)
 
 ## 如何被游戏仓库引用
 
@@ -31,6 +32,10 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
 
 框架仓库发新 tag / 新 zip 归档 → 游戏仓库改 `dependencies#0` 的 URL → `Fetch Libraries`。
 
+## 导出库 ZIP
+
+`python3 scripts/export-libraries.py` 将 `framework/` 与 `game_modules/` 分别导出为独立的 Defold Library ZIP（`dist/libraries/`，已被 gitignore）。framework 版本号自动取自最新 `vX.Y.Z` git tag，保证 ZIP 版本与 tag 内容一致；产物清单（含 SHA-256）写入 `dist/libraries/manifest.json`。
+
 ## 纯 Lua 单测
 
-`tests/lua/` 下是框架模块的纯 Lua 单测（不依赖 Defold 运行时），用 `lua tests/lua/test_xxx.lua` 运行。
+`tests/lua/` 下是框架模块的纯 Lua 单测（不依赖 Defold 运行时），用 `lua tests/lua/test_xxx.lua` 运行（含 `test_tycoon_ui.lua` 品牌层用例）。
