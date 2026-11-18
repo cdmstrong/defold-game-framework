@@ -51,6 +51,7 @@ python3 scripts/publish-framework.py          # 造 fw-dist 快照 + 推送 + �
 | 要做的事 | 命令 / 位置 |
 |---|---|
 | 从真实项目刷新模板快照 | `python3 scripts/snapshot-template.py --from ../platformer-game --name platformer` |
+| 查某个 Defold 特性的官方写法（animation / physics / gui / tilemap / factory…） | `../examples-ref/`（Defold 官方示例库 defold/examples 的本地副本，CC0，**不进 git**；140 个独立小项目，每个自带 `game.project`，要跑哪个就单独打开那个子目录。更新：从 GitHub 拉 defold/examples 重新覆盖该目录） |
 | 校验库分层没串味 | `python3 scripts/check-layers.py`（最小消费者，必须 PASS） |
 | 导出离线库 ZIP | `python3 scripts/export-libraries.py` |
 | 新建项目的完整 SOP / 手工兜底 | `framework/docs/project-bootstrap.md` |
