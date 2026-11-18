@@ -35,7 +35,7 @@
 | 文档 | 用途 |
 |---|---|
 | [project-bootstrap.md](project-bootstrap.md) | 新项目初始化 & 从现有项目复制启动（通用模板，不含具体游戏专属值） |
-| [`../../docs/creating-games.md`](../../docs/creating-games.md) | 旧版《批量创建新游戏手册》（以 miner-game 为模板、`examples/<游戏名>/` 结构）。**与 `project-bootstrap.md` 是两套骨架，别混** |
+| [`../../docs/bootstrap/creating-games.md`](../../docs/bootstrap/creating-games.md) | 旧版《批量创建新游戏手册》（以 miner-game 为模板、历史 `examples/<游戏名>/` 结构，该目录已更名 `templates/`）。**与 `project-bootstrap.md` 是两套骨架，别混** |
 
 ## 官方资料入口（第 2 步用）
 
