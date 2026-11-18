@@ -2,6 +2,13 @@
 
 本文说明如何用 `defold-game-framework` 框架，批量创建独立游戏仓库。
 
+## 仓库地址
+
+- **框架仓库（公开）**：https://github.com/cdmstrong/defold-game-framework
+- **演示游戏仓库（私有）**：https://github.com/cdmstrong/miner-game
+
+框架仓库已设为公开，GitHub 的 codeload 归档 URL 可被 Defold 匿名拉取。
+
 ## 架构总览
 
 ```
@@ -73,10 +80,13 @@ no_auto_input = 0
 
 依赖 URL 两种写法：
 
-- **本地开发（离线可复现）**：`http://127.0.0.1:8899/v1.0.0.zip`（需本地起 HTTP 服务提供 zip）
-- **正式（上 GitHub 后）**：`https://github.com/<you>/defold-game-framework/archive/refs/tags/v1.0.0.zip`
+- **正式（GitHub，推荐）**：`https://codeload.github.com/cdmstrong/defold-game-framework/zip/<commit-sha>`（codeload 格式，和 druid/monarch 一致）
+- **本地开发（离线可复现）**：`http://127.0.0.1:8899/fw.zip`（需本地起 HTTP 服务提供 zip）
 
-> 注意：druid/monarch/event 也必须列出，因为 Defold 依赖是扁平解析的，游戏仓库要自己声明全部第三方依赖。
+> 注意：
+> - druid/monarch/event 也必须列出，因为 Defold 依赖是扁平解析的，游戏仓库要自己声明全部第三方依赖。
+> - GitHub 的 `github.com/.../archive/...` 链接在本机网络下连接会被重置，请用 `codeload.github.com/.../zip/<sha>` 格式。
+> - Bob 并发下载多个 codeload 归档时在本机网络下偶发中断（4 个依赖随机某个失败）。若 resolve 报 `Failed to fetch`，可重试，或改用本地 HTTP 方式一次性 resolve（见下文「本地提供框架 zip」）。
 
 ### 3. 复制构建工具链
 
