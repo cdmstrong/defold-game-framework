@@ -18,6 +18,7 @@ local function clone(value, seen)
 end
 function M.create(routes, adapter, options)
     options = options or {}
+    local now_ms = options.now_ms or function() return os.time() * 1000 end
     local self = { disposed = false, pending = nil, modal = nil, sequence = 0 }
     local function notify(callback, result, err)
         if not callback then return end
@@ -38,18 +39,36 @@ function M.create(routes, adapter, options)
     end
     local function begin(operation, done, invoke)
         self.sequence = self.sequence + 1
-        local request = { id = self.sequence, done = done, operation = operation }
+        local request = { id = self.sequence, done = done, operation = operation, started_at = now_ms() }
         self.pending = request
         local function finish(result, err)
             if self.pending ~= request then return end
             self.pending = nil
             notify(done, result, err)
         end
+        request.finish = finish -- update() 超时恢复时调用
         local ok, detail = pcall(invoke, finish)
         if not ok then finish(nil, error_value("transition_failed", tostring(detail))) end
         return request.id
     end
     function self:is_busy() return self.pending ~= nil or adapter:is_busy() end
+
+    -- 每帧更新：超时恢复 + 驱动 adapter。
+    -- 转场完成回调若丢失（popup 被外部关闭、Monarch 内部异常等），pending
+    -- 会永久占住 busy。这里兜底：超过 transition_timeout_ms（默认 10s）仍未
+    -- 结束的转场，按 transition_timeout 结算并释放 busy（modal 场景会连带
+    -- 释放 pause）。
+    function self:update(now)
+        if not self.disposed and self.pending then
+            local request = self.pending
+            local now_value = now or now_ms()
+            if (now_value - request.started_at) > (options.transition_timeout_ms or 10000) then
+                if options.logger then pcall(options.logger, "transition_timeout", request.operation) end
+                request.finish(nil, error_value("transition_timeout", request.operation))
+            end
+        end
+        if adapter.update then adapter:update(now) end
+    end
     function self:open(id, data, done)
         local ok, err = available(); if not ok then return nil, err end
         if not routes[id] then return nil, error_value("unknown_route", tostring(id)) end

@@ -1,6 +1,6 @@
 [project]
 title = Defold Game Framework
-version = 1.0.0
+version = 1.1.0
 dependencies#0 = https://codeload.github.com/Insality/druid/zip/9a5171377fc2f7fba68fea4f2c117ee6a25d28a4
 dependencies#1 = https://codeload.github.com/britzl/monarch/zip/5c33c39830489925493163e741d5b22b4e5e3b9d
 dependencies#2 = https://codeload.github.com/Insality/defold-event/zip/384813497c25ff41d34ab1efdb1163217dc9dd26

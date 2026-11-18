@@ -1,16 +1,31 @@
--- 激励视频门面（业务唯一入口）。
+-- 激励视频门面（业务唯一入口，V2：异步轮询契约）。
 --
--- 业务侧只关心两件事：能不能看、看完发不发奖。
+-- 业务侧关心三件事：能不能看、发起播放、结果结算。
 -- 平台差异、多次回调、超时、重入、幂等都在这一层和 provider 层消化掉。
 --
--- 用法：
---   local reward = RewardAd.create({ platform = "leyuan", js = js_exec, ... })
---   local result = reward:show_rewarded({ tag = "revive" })
---   if result.success then reward:grant_once(result.request_id, function() grant_reward() end) end
+-- V2 用法（真实渠道是异步的，必须接 update 轮询）：
+--   local reward = RewardAd.create({ platform = "taptap", ... })
+--   reward:on_ad_open(function() pause:acquire("ad") end)
+--   reward:on_ad_close(function(result) pause:release(); handle(result) end)
 --
--- 广告播放期间游戏主循环要暂停，用 on_ad_open / on_ad_close：
---   reward:on_ad_open(function() ... end)
---   reward:on_ad_close(function(result) ... end)
+--   -- 点击时：
+--   local result = reward:show_rewarded({ tag = "revive" })
+--   if not result.pending then handle(result) end   -- 同步终态（busy/mock）
+--
+--   -- 每帧（如 Defold update）：
+--   local settled = reward:update()
+--   -- settled ~= nil 时 on_ad_close 已触发，无需重复处理
+--
+--   -- 发奖（幂等）：
+--   if result.success then reward:grant_once(result.request_id, function() ... end) end
+--
+-- 时序语义：
+--   show_rewarded 立即返回；真实渠道返回 { pending = true }（busy 保持 true，
+--   on_ad_open 已触发），终态由 update() 轮询 provider:poll(request_id) 获得。
+--   update() 同时是看门狗：pending 超过 timeout_ms + grace 时兜底结算为
+--   timeout 并释放 busy，杜绝「广告卡死导致游戏永久暂停」。
+--   request_id 贯穿 show → poll，provider 丢弃 request_id 不匹配的晚到结果，
+--   因此上一个请求的迟到结果绝不会污染或冒充下一次请求。
 --
 -- 对齐 cocos-template 的 RewardAdService.ts 语义。
 
@@ -42,23 +57,11 @@ local function build_js_exec(sys, html5_mod, json)
     if not run then return nil end
 
     return function(code)
-        -- html5.run(code) 执行 JS；结果通过 window.__ad_result__ 回传。
-        -- 再用一次 html5.run 读取 JSON 字符串。
-        local ok, _ = pcall(run, code)
+        -- html5.run(code) 执行 JS 并返回字符串结果（provider 的 JS 负责把
+        -- 状态 JSON.stringify 回来；发起类语句返回 undefined → nil）。
+        local ok, res = pcall(run, code)
         if not ok then return nil end
-        local read = run("window.__ad_result__ ? JSON.stringify(window.__ad_result__) : ''")
-        if type(read) == "string" and read ~= "" then
-            local decoded = nil
-            if json and json.decode then decoded = json.decode(read) end
-            if not decoded then
-                local ok2, d = pcall(function() return _G.json and _G.json.decode(read) end)
-                if ok2 then decoded = d end
-            end
-            -- 清理，避免跨调用污染
-            pcall(run, "window.__ad_result__ = undefined")
-            return decoded
-        end
-        return nil
+        return res
     end
 end
 
@@ -68,7 +71,7 @@ function M.create(options)
 
     local self = {
         platform_id = options.platform or "none",
-        config = options.config or {}, -- per-provider 配置（ad_unit_id / sdk_url 等）
+        config = options.config or {}, -- per-provider 配置（ad_unit_id / sdk_url / async 等）
         js = options.js or build_js_exec(sys, options.html5) or default_js_exec,
         logger = options.logger or AdLogger.create({ out = options.out }),
         provider = nil,
@@ -83,14 +86,14 @@ function M.create(options)
         timeout_ms = options.timeout_ms or 120000,
         watchdog_grace_ms = options.watchdog_grace_ms or 15000,
         now_ms = options.now_ms or default_now_ms,
-        sleep = options.sleep or function(sec) end, -- mock provider 用；默认 no-op
+        sleep = options.sleep or function(sec) end, -- mock 同步模式用；默认 no-op
+        pending_request = nil, -- { request_id, started_at, timeout_at, provider }
     }
 
     -- provider 上下文
     local ctx = {
         js = function(code)
-            local res = self.js(code)
-            return res
+            return self.js(code)
         end,
         log = function(event, detail, raw) self.logger:log(event, detail, raw) end,
         now_ms = function() return self.now_ms() end,
@@ -125,6 +128,29 @@ function M.create(options)
         return tostring(self.platform_id) .. "-" .. tostring(self.now_ms()) .. "-" .. tostring(self.counter)
     end
 
+    -- 终态归一化 + busy 释放 + close 事件。唯一的结算出口。
+    local function settle(result, provider_result)
+        provider_result = provider_result or {}
+        result = result or {}
+        result.success = provider_result.success == true
+        result.status = provider_result.status
+        result.reason = provider_result.reason or "unknown"
+        result.platform = result.platform or self.platform_id
+        result.request_id = result.request_id
+        result.mocked = provider_result.mocked == true
+        result.duration_ms = self.now_ms() - (result.started_at or self.now_ms())
+        result.raw = provider_result.raw
+        result.error = provider_result.error
+
+        self.busy = false
+        self.busy_tag = ""
+        self.pending_request = nil
+
+        self.logger:log("show_end", tostring(result.reason) .. " success=" .. tostring(result.success) .. " " .. tostring(result.duration_ms) .. "ms", result.raw)
+        emit_close(result)
+        return result
+    end
+
     -- 平台 id
     function self:get_platform_id()
         return self.platform_id
@@ -145,17 +171,22 @@ function M.create(options)
         self.logger:log("platform_set", "platform=" .. tostring(id))
     end
 
-    -- 预热：提前加载 SDK。返回 SDK 是否就绪。
+    -- 预热：提前加载 SDK。返回 SDK 是否就绪（未就绪不算失败，稍后自然就绪）。
     function self:init()
-        local ok, err = get_provider():init()
-        if not ok then
+        local provider = get_provider()
+        local ok, err = provider:init()
+        if ok == nil then
             self.logger:warn("init_failed", tostring(err and err.message or err))
             return false
         end
-        return true
+        if provider.poll_init then
+            return provider:poll_init() and true or false
+        end
+        return ok and true or false
     end
 
     -- 是否可播放激励视频。false 时业务应隐藏入口或走替代逻辑。
+    -- false 不区分「渠道不可用」与「SDK 还在加载」——后者稍后自然变 true。
     function self:is_supported()
         if self.support_cache == true then return true end
         if self.support_cache == false and (self.now_ms() - self.support_cache_at) < SUPPORT_FALSE_TTL_MS then
@@ -175,7 +206,12 @@ function M.create(options)
         return self.busy
     end
 
-    -- 播放激励视频。返回归一化的 RewardedVideoResult。
+    -- 发起播放。
+    -- 返回值：
+    --   { pending = true, request_id, platform, started_at }  -- 异步进行中，
+    --       busy 保持 true，结果等 update() 轮询；result.success 为 nil
+    --   result（完整归一化结果）                                -- 同步终态
+    --   busy / 异常路径返回 success=false 的完整结果（非 pending）
     function self:show_rewarded(show_options)
         show_options = show_options or {}
         local started_at = self.now_ms()
@@ -196,12 +232,8 @@ function M.create(options)
         emit_open()
         self.logger:log("show_begin", "platform=" .. platform .. " tag=" .. tostring(show_options.tag or "-") .. " timeout=" .. tostring(timeout_ms))
 
-        local result
         local ok, provider_result = pcall(function()
             local provider = get_provider()
-            -- 看门狗：provider 自身会超时，但万一卡住，这里兜底结算。
-            -- 由于 Lua 无 Promise，watchdog 依赖 provider 内部遵守 timeout_ms；
-            -- 门面侧不再二次计时（避免纯 Lua 测试复杂化），但仍保留兜底语义。
             return provider:show_rewarded({
                 request_id = request_id,
                 timeout_ms = timeout_ms + self.watchdog_grace_ms,
@@ -210,32 +242,65 @@ function M.create(options)
         end)
 
         if not ok then
-            result = {
-                success = false, status = nil, reason = "exception", platform = platform,
-                request_id = request_id, mocked = false,
-                duration_ms = self.now_ms() - started_at, error = provider_result,
-            }
-        else
-            provider_result = provider_result or {}
-            result = {
-                success = provider_result.success == true,
-                status = provider_result.status,
-                reason = provider_result.reason or "unknown",
-                platform = platform,
+            -- provider 抛异常：立即结算为 exception（非 pending）。
+            return settle({
+                started_at = started_at,
                 request_id = request_id,
-                mocked = provider_result.mocked == true,
-                duration_ms = self.now_ms() - started_at,
-                raw = provider_result.raw,
-                error = provider_result.error,
+            }, { success = false, reason = "exception", error = provider_result })
+        end
+
+        if type(provider_result) == "table" and provider_result.pending then
+            -- 异步进行中：保持 busy，记录看门狗截止时间，等 update() 轮询。
+            self.pending_request = {
+                request_id = request_id,
+                started_at = started_at,
+                timeout_at = started_at + timeout_ms + self.watchdog_grace_ms,
+                provider = get_provider(),
+            }
+            self.logger:log("show_pending", "request_id=" .. tostring(request_id) .. " 等待 update() 轮询终态")
+            return {
+                pending = true,
+                request_id = request_id,
+                platform = platform,
+                started_at = started_at,
             }
         end
 
-        self.busy = false
-        self.busy_tag = ""
+        -- 同步终态（mock/none/busy 等）：立即结算。
+        return settle({ started_at = started_at, request_id = request_id }, provider_result)
+    end
 
-        self.logger:log("show_end", tostring(result.reason) .. " success=" .. tostring(result.success) .. " " .. tostring(result.duration_ms) .. "ms", result.raw)
-        emit_close(result)
-        return result
+    -- 每帧轮询 pending 广告。返回 nil（进行中）或结算后的完整结果
+    -- （结算时 on_ad_close 已触发；结果.reason 可能是 timeout —— 看门狗兜底）。
+    function self:update()
+        local pending = self.pending_request
+        if not pending then return nil end
+        local now = self.now_ms()
+
+        -- 看门狗：provider 一直没给终态（JS 回调丢失/宿主异常），兜底结算，
+        -- 释放 busy 与暂停，避免游戏永久卡在广告态。
+        if now > pending.timeout_at then
+            self.logger:warn("watchdog", "request_id=" .. tostring(pending.request_id) .. " 超时未收到终态，兜底结算")
+            return settle({
+                started_at = pending.started_at,
+                request_id = pending.request_id,
+            }, { success = false, reason = "timeout", status = nil })
+        end
+
+        local ok, polled = pcall(pending.provider.poll, pending.provider, pending.request_id)
+        if not ok then
+            self.logger:error("poll_error", tostring(polled))
+            return settle({
+                started_at = pending.started_at,
+                request_id = pending.request_id,
+            }, { success = false, reason = "exception", error = polled })
+        end
+        if polled == nil then return nil end
+
+        return settle({
+            started_at = pending.started_at,
+            request_id = pending.request_id,
+        }, polled)
     end
 
     -- 同一次广告只发一次奖。
