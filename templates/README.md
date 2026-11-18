@@ -3,6 +3,19 @@
 新游戏的起点。**本目录不进游戏依赖**：发布用的 `fw-dist` 分支只含 `framework/` + `game.project`，
 所以这里的骨架再大也不会跑到别人的项目里（`framework-releases/` 的整仓 ZIP 时代已经结束）。
 
+## 新建游戏（唯一入口）
+
+不要手抄 rsync 清单，跑脚本：
+
+```bash
+cd /Users/chendongming/coding/auto-games/defold/defold-game-framework
+python3 scripts/new-game.py --type platformer --name my-game --title "我的游戏"
+```
+
+它按本目录的 `template.json` 复制骨架、改写标识、归零 `version`、写已发布的 `fw-dist` 依赖、
+拷字体与 `bob.jar`，再真实 `resolve` + `build` 断言，最后 `git init` 首提。
+`--dry-run` 只看计划。完整说明见 `../AGENTS.md` 第一节。
+
 ## 两种骨架，结构不同，别混
 
 | `skeleton` | 含义 | 怎么用 |

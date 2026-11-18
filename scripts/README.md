@@ -4,6 +4,7 @@
 
 | 脚本 | 作用 | 依赖 |
 | --- | --- | --- |
+| `new-game.py` | **新建游戏**：读 `templates/<type>/template.json`，一条命令完成 复制骨架 → 改写标识 → 归零版本 → 写 `fw-dist` 依赖 → 拷字体和 bob → resolve+build 断言 → `git init` 首提 | Python 3 + git + 本地 `bob.jar` |
 | `publish-framework.py` | **发布瘦依赖**：把 `framework/` + 生成的 `game.project` 提交到 `fw-dist` 分支并推送，打印游戏要用的 `dependencies#0 = codeload…/zip/<sha>` | Python 3 + git |
 | `export-libraries.py` | 把 `framework/` 与 `game_modules/tycoon/` 导出为两个独立库 ZIP；framework 版本号自动跟随本仓库 git tag（可用 `--framework-version` / `--tycoon-version` 覆盖） | Python 3，无第三方包 |
 | `check-layers.py` | 构造只引用这两个库 ZIP 的最小消费者项目（无 GUI、无字体），验证 `require` 可达、编译通过、`templates/` 没漏进依赖 | Python 3 + 本地 `bob.jar` |
@@ -15,6 +16,10 @@
 
 ```bash
 cd defold-game-framework
+
+# 新建游戏（唯一入口，不要手抄 rsync）
+python3 scripts/new-game.py --type platformer --name my-game --title "我的游戏"
+python3 scripts/new-game.py --type platformer --name my-game --dry-run   # 只看计划
 
 # 改完 framework/ 后发布瘦依赖（commit 会自动推 fw-dist 分支）
 python3 scripts/publish-framework.py --dry-run   # 先看计划
