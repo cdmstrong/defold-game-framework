@@ -1,0 +1,614 @@
+script: "/examples/ui_demo/settings.gui_script"
+fonts {
+  name: "default"
+  font: "/builtins/fonts/default.font"
+}
+fonts {
+  name: "zh"
+  font: "/assets/fonts/zh.font"
+}
+nodes {
+  size {
+    x: 1.0
+    y: 1.0
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 1800.0
+    y: 1800.0
+  }
+  color {
+    x: 0.045
+    y: 0.06
+    z: 0.1
+  }
+  type: TYPE_BOX
+  id: "background"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 800.0
+    y: 520.0
+  }
+  color {
+    x: 0.085
+    y: 0.115
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "panel"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 535.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "SETTINGS"
+  font: "zh"
+  id: "title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 330.0
+    y: 430.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 260.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "Music"
+  font: "zh"
+  id: "vol_music_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 500.0
+    y: 430.0
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "vol_music_minus"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 500.0
+    y: 430.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 44.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "-"
+  font: "zh"
+  id: "vol_music_minus_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 570.0
+    y: 430.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 80.0
+    y: 35.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_TEXT
+  text: "80%"
+  font: "zh"
+  id: "vol_music_value"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 430.0
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "vol_music_plus"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 430.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 44.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "+"
+  font: "zh"
+  id: "vol_music_plus_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 330.0
+    y: 365.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 260.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "SFX"
+  font: "zh"
+  id: "vol_sfx_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 500.0
+    y: 365.0
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "vol_sfx_minus"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 500.0
+    y: 365.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 44.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "-"
+  font: "zh"
+  id: "vol_sfx_minus_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 570.0
+    y: 365.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 80.0
+    y: 35.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_TEXT
+  text: "100%"
+  font: "zh"
+  id: "vol_sfx_value"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 365.0
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "vol_sfx_plus"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 365.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 44.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "+"
+  font: "zh"
+  id: "vol_sfx_plus_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 400.0
+    y: 290.0
+  }
+  size {
+    x: 200.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "mute"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 400.0
+    y: 290.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "Mute"
+  font: "zh"
+  id: "mute_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 620.0
+    y: 290.0
+  }
+  size {
+    x: 200.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "locale"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 620.0
+    y: 290.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "Language"
+  font: "zh"
+  id: "locale_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 330.0
+    y: 200.0
+  }
+  size {
+    x: 200.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "pause"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 330.0
+    y: 200.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "PAUSE"
+  font: "zh"
+  id: "pause_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 550.0
+    y: 200.0
+  }
+  size {
+    x: 200.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "dialog"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 550.0
+    y: 200.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "DIALOG"
+  font: "zh"
+  id: "dialog_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 110.0
+  }
+  size {
+    x: 240.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "back"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 110.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 240.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "BACK"
+  font: "zh"
+  id: "back_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 60.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 760.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "zh"
+  id: "status"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 30.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 760.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "zh"
+  id: "pause_status"
+  parent: "root"
+  inherit_alpha: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 96

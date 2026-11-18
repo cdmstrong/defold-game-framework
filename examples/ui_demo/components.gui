@@ -1,0 +1,962 @@
+script: "/examples/ui_demo/components.gui_script"
+fonts {
+  name: "default"
+  font: "/builtins/fonts/default.font"
+}
+textures {
+  name: "druid"
+  texture: "/druid/druid.atlas"
+}
+nodes {
+  size {
+    x: 1.0
+    y: 1.0
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 1800.0
+    y: 1800.0
+  }
+  color {
+    x: 0.045
+    y: 0.06
+    z: 0.1
+  }
+  type: TYPE_BOX
+  id: "background"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 940.0
+    y: 620.0
+  }
+  color {
+    x: 0.085
+    y: 0.115
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "surface"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 200.0
+    y: 600.0
+  }
+  scale {
+    x: 0.75
+    y: 0.75
+  }
+  size {
+    x: 400.0
+    y: 40.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "COMPONENTS"
+  font: "default"
+  id: "title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 840.0
+    y: 600.0
+  }
+  size {
+    x: 180.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "theme"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 840.0
+    y: 600.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 180.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "Theme: dark"
+  font: "default"
+  id: "theme_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 120.0
+    y: 520.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "Button"
+  font: "default"
+  id: "btn_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 130.0
+    y: 480.0
+  }
+  size {
+    x: 200.0
+    y: 48.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "count"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 130.0
+    y: 480.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "ADD ONE"
+  font: "default"
+  id: "count_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 360.0
+    y: 480.0
+  }
+  size {
+    x: 200.0
+    y: 48.0
+  }
+  color {
+    x: 0.35
+    y: 0.38
+    z: 0.45
+  }
+  type: TYPE_BOX
+  id: "disabled"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 360.0
+    y: 480.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.6
+    y: 0.62
+    z: 0.66
+  }
+  type: TYPE_TEXT
+  text: "DISABLED"
+  font: "default"
+  id: "disabled_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 590.0
+    y: 480.0
+  }
+  size {
+    x: 200.0
+    y: 48.0
+  }
+  color {
+    x: 0.83
+    y: 0.55
+    z: 0.16
+  }
+  type: TYPE_BOX
+  id: "ad"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 590.0
+    y: 480.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 200.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "WATCH AD"
+  font: "default"
+  id: "ad_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 520.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "Progress"
+  font: "default"
+  id: "prog_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 700.0
+    y: 480.0
+  }
+  size {
+    x: 300.0
+    y: 20.0
+  }
+  color {
+    x: 0.2
+    y: 0.25
+    z: 0.32
+  }
+  type: TYPE_BOX
+  id: "progress_bg"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 700.0
+    y: 480.0
+  }
+  size {
+    x: 300.0
+    y: 20.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "progress_fill"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 120.0
+    y: 420.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "Currency"
+  font: "default"
+  id: "curr_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 150.0
+    y: 385.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 300.0
+    y: 40.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_TEXT
+  text: "\302\2450"
+  font: "default"
+  id: "currency_value"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 460.0
+    y: 440.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "ItemCard"
+  font: "default"
+  id: "card_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 460.0
+    y: 380.0
+  }
+  size {
+    x: 250.0
+    y: 100.0
+  }
+  color {
+    x: 0.11
+    y: 0.15
+    z: 0.23
+  }
+  type: TYPE_BOX
+  id: "card"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 460.0
+    y: 405.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 230.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "card_title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 460.0
+    y: 378.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 230.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "card_subtitle"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 460.0
+    y: 352.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 230.0
+    y: 30.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "card_price"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 120.0
+    y: 320.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "Tab"
+  font: "default"
+  id: "tab_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 130.0
+    y: 270.0
+  }
+  size {
+    x: 110.0
+    y: 40.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "tab_a"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 130.0
+    y: 270.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 110.0
+    y: 30.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "TAB A"
+  font: "default"
+  id: "tab_a_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 130.0
+    y: 252.0
+  }
+  size {
+    x: 110.0
+    y: 4.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "tab_a_mark"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 260.0
+    y: 270.0
+  }
+  size {
+    x: 110.0
+    y: 40.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "tab_b"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 260.0
+    y: 270.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 110.0
+    y: 30.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "TAB B"
+  font: "default"
+  id: "tab_b_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 260.0
+    y: 252.0
+  }
+  size {
+    x: 110.0
+    y: 4.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "tab_b_mark"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 390.0
+    y: 270.0
+  }
+  size {
+    x: 110.0
+    y: 40.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "tab_c"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 390.0
+    y: 270.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 110.0
+    y: 30.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "TAB C"
+  font: "default"
+  id: "tab_c_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 390.0
+    y: 252.0
+  }
+  size {
+    x: 110.0
+    y: 4.0
+  }
+  color {
+    x: 0.98
+    y: 0.72
+    z: 0.18
+  }
+  type: TYPE_BOX
+  id: "tab_c_mark"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 720.0
+    y: 370.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 200.0
+    y: 30.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  text: "Scroll"
+  font: "default"
+  id: "scroll_section"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 720.0
+    y: 280.0
+  }
+  size {
+    x: 240.0
+    y: 150.0
+  }
+  color {
+    x: 0.07
+    y: 0.09
+    z: 0.14
+  }
+  type: TYPE_BOX
+  id: "scroll_view"
+  parent: "root"
+  inherit_alpha: true
+  clipping_mode: CLIPPING_MODE_STENCIL
+}
+nodes {
+  position {
+    x: 720.0
+    y: 280.0
+  }
+  size {
+    x: 220.0
+    y: 320.0
+  }
+  color {
+    x: 0.11
+    y: 0.15
+    z: 0.23
+  }
+  type: TYPE_BOX
+  id: "scroll_content"
+  parent: "scroll_view"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 100.0
+  }
+  size {
+    x: 400.0
+    y: 50.0
+  }
+  color {
+    x: 0.11
+    y: 0.15
+    z: 0.23
+  }
+  type: TYPE_BOX
+  id: "toast"
+  parent: "root"
+  inherit_alpha: true
+  alpha: 0.95
+  visible: false
+}
+nodes {
+  position {
+    x: 480.0
+    y: 100.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 380.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "toast_text"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 320.0
+    y: 170.0
+  }
+  size {
+    x: 160.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "settings"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 320.0
+    y: 170.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 160.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "SETTINGS"
+  font: "default"
+  id: "settings_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 170.0
+  }
+  size {
+    x: 160.0
+    y: 44.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "back"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 640.0
+    y: 170.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 160.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "BACK"
+  font: "default"
+  id: "back_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 40.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "status"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 15.0
+  }
+  scale {
+    x: 0.55
+    y: 0.55
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.5
+    y: 0.65
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "pause_status"
+  parent: "root"
+  inherit_alpha: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 256

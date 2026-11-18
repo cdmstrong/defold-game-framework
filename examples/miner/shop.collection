@@ -1,0 +1,2 @@
+name: "shop"
+instances { id: "view" prototype: "/examples/miner/shop.go" position { x: 0 y: 0 z: 0 } }

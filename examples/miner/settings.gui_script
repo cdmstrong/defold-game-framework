@@ -1,0 +1,6 @@
+local view = require "examples.miner.view"
+function init(self) view.init(self, "settings") end
+function update(self, dt) view.update(self, dt) end
+function on_input(self, action_id, action) return view.input(self, action_id, action) end
+function on_message(self, message_id, message, sender) view.message(self, message_id, message, sender) end
+function final(self) view.final(self) end

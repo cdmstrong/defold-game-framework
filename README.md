@@ -39,3 +39,21 @@ dependencies#3 = https://codeload.github.com/Insality/defold-event/zip/384813497
 ## 纯 Lua 单测
 
 `tests/lua/` 下是框架模块的纯 Lua 单测（不依赖 Defold 运行时），用 `lua tests/lua/test_xxx.lua` 运行（含 `test_tycoon_ui.lua` 品牌层用例）。
+
+## 仓库结构
+
+```
+framework/                 ← 品类中立层（唯一被游戏依赖的运行时）
+game_modules/tycoon/       ← 经营类品牌层（只依赖 framework）
+tests/lua/                 ← 纯 Lua 单测
+docs/                      ← 手册与设计/验证记录（creating-games.md 是新建游戏入口）
+scripts/                   ← 导出 ZIP / 隔离校验 / 依赖锁定（见 scripts/README.md）
+examples/                  ← 参考示例（miner 经营类 + ui_demo 组件演示）
+```
+
+**`examples/` 不参与导出**：`game.project` 的 `[library] include_dirs` 只含 `framework`，
+所以示例代码不会被依赖本库的游戏拉走，仅作仓库内参考与本地跑通验证。
+
+> 历史上曾有一个并列的本地工作区 `game-framework/`（放示例、素材、构建产物，持有一份框架副本）。
+> 该工作区已废弃删除，其中的脚本、示例、设计文档均已并入本仓库。
+> 新建/调试游戏请直接建独立游戏仓库（见 `docs/creating-games.md`）。

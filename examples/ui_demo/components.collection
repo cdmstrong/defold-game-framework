@@ -1,0 +1,2 @@
+name: "components"
+instances { id: "view" prototype: "/examples/ui_demo/components.go" position { x: 0 y: 0 z: 0 } }

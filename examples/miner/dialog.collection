@@ -1,0 +1,2 @@
+name: "dialog"
+instances { id: "view" prototype: "/examples/miner/dialog.go" position { x: 0 y: 0 z: 0 } }

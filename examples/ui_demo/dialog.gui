@@ -1,0 +1,236 @@
+script: "/examples/ui_demo/dialog.gui_script"
+fonts {
+  name: "default"
+  font: "/builtins/fonts/default.font"
+}
+nodes {
+  size {
+    x: 1.0
+    y: 1.0
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 1800.0
+    y: 1800.0
+  }
+  color {
+    x: 0.02
+    y: 0.03
+    z: 0.05
+  }
+  type: TYPE_BOX
+  id: "shade"
+  parent: "root"
+  inherit_alpha: true
+  alpha: 0.78
+}
+nodes {
+  position {
+    x: 480.0
+    y: 330.0
+  }
+  size {
+    x: 560.0
+    y: 340.0
+  }
+  color {
+    x: 0.11
+    y: 0.15
+    z: 0.23
+  }
+  type: TYPE_BOX
+  id: "panel"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 460.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "CONFIRM ACTION"
+  font: "default"
+  id: "title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 410.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "The page below is visible but cannot be clicked."
+  font: "default"
+  id: "description"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 345.0
+    y: 310.0
+  }
+  size {
+    x: 240.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "confirm"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 345.0
+    y: 310.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "CONFIRM"
+  font: "default"
+  id: "confirm_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 615.0
+    y: 310.0
+  }
+  size {
+    x: 240.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "cancel"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 615.0
+    y: 310.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  text: "CANCEL"
+  font: "default"
+  id: "cancel_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 235.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "status"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 195.0
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 700.0
+    y: 35.0
+  }
+  color {
+    x: 0.85
+    y: 0.9
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "pause_status"
+  parent: "root"
+  inherit_alpha: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

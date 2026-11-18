@@ -1,0 +1,7 @@
+name: "main"
+instances { id: "bootstrap" prototype: "/examples/miner/bootstrap.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "mine_route" prototype: "/examples/miner/mine_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "shop_route" prototype: "/examples/miner/shop_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "upgrade_route" prototype: "/examples/miner/upgrade_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "settings_route" prototype: "/examples/miner/settings_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "dialog_route" prototype: "/examples/miner/dialog_route.go" position { x: 0 y: 0 z: 0 } }

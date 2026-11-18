@@ -1,0 +1,6 @@
+name: "main"
+instances { id: "bootstrap" prototype: "/examples/ui_demo/bootstrap.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "home_route" prototype: "/examples/ui_demo/home_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "components_route" prototype: "/examples/ui_demo/components_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "settings_route" prototype: "/examples/ui_demo/settings_route.go" position { x: 0 y: 0 z: 0 } }
+instances { id: "dialog_route" prototype: "/examples/ui_demo/dialog_route.go" position { x: 0 y: 0 z: 0 } }

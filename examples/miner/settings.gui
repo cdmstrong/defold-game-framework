@@ -1,0 +1,225 @@
+script: "/examples/miner/settings.gui_script"
+fonts {
+  name: "default"
+  font: "/builtins/fonts/default.font"
+}
+fonts {
+  name: "zh"
+  font: "/assets/fonts/zh.font"
+}
+nodes {
+  size {
+    x: 1.0
+    y: 1.0
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 1800.0
+    y: 1800.0
+  }
+  color {
+    x: 0.05
+    y: 0.08
+    z: 0.12
+  }
+  type: TYPE_BOX
+  id: "background"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 580.0
+  }
+  scale {
+    x: 0.8
+    y: 0.8
+  }
+  size {
+    x: 700.0
+    y: 40.0
+  }
+  color {
+    x: 0.95
+    y: 0.75
+    z: 0.25
+  }
+  type: TYPE_TEXT
+  text: "\350\256\276\347\275\256"
+  font: "zh"
+  id: "title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 420.0
+  }
+  size {
+    x: 400.0
+    y: 60.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "mute"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 420.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 400.0
+    y: 40.0
+  }
+  type: TYPE_TEXT
+  text: "\351\235\231\351\237\263"
+  font: "zh"
+  id: "mute_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 330.0
+  }
+  size {
+    x: 400.0
+    y: 60.0
+  }
+  color {
+    x: 0.18
+    y: 0.55
+    z: 0.4
+  }
+  type: TYPE_BOX
+  id: "locale"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 330.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 400.0
+    y: 40.0
+  }
+  type: TYPE_TEXT
+  text: "\350\257\255\350\250\200: \344\270\255\346\226\207"
+  font: "zh"
+  id: "locale_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 240.0
+  }
+  size {
+    x: 400.0
+    y: 60.0
+  }
+  color {
+    x: 0.83
+    y: 0.55
+    z: 0.16
+  }
+  type: TYPE_BOX
+  id: "ad"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 240.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 400.0
+    y: 40.0
+  }
+  type: TYPE_TEXT
+  text: "\347\234\213\345\271\277\345\221\212\347\277\273\345\200\215"
+  font: "zh"
+  id: "ad_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 120.0
+    y: 90.0
+  }
+  size {
+    x: 180.0
+    y: 54.0
+  }
+  color {
+    x: 0.35
+    y: 0.38
+    z: 0.45
+  }
+  type: TYPE_BOX
+  id: "back"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 120.0
+    y: 90.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 180.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "\350\277\224\345\233\236"
+  font: "zh"
+  id: "back_label"
+  parent: "root"
+  inherit_alpha: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

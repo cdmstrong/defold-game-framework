@@ -1,0 +1,280 @@
+script: "/examples/miner/mine.gui_script"
+fonts {
+  name: "default"
+  font: "/builtins/fonts/default.font"
+}
+fonts {
+  name: "zh"
+  font: "/assets/fonts/zh.font"
+}
+nodes {
+  size {
+    x: 1.0
+    y: 1.0
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: 480.0
+    y: 320.0
+  }
+  size {
+    x: 1800.0
+    y: 1800.0
+  }
+  color {
+    x: 0.05
+    y: 0.08
+    z: 0.12
+  }
+  type: TYPE_BOX
+  id: "background"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 580.0
+  }
+  scale {
+    x: 0.8
+    y: 0.8
+  }
+  size {
+    x: 700.0
+    y: 40.0
+  }
+  color {
+    x: 0.95
+    y: 0.75
+    z: 0.25
+  }
+  type: TYPE_TEXT
+  text: "\346\214\226\347\237\277\345\244\247\344\272\250"
+  font: "zh"
+  id: "title"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 430.0
+  }
+  scale {
+    x: 0.5
+    y: 0.5
+  }
+  size {
+    x: 700.0
+    y: 28.0
+  }
+  color {
+    x: 0.65
+    y: 0.7
+    z: 0.8
+  }
+  type: TYPE_TEXT
+  font: "default"
+  id: "miner_count"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 270.0
+  }
+  size {
+    x: 280.0
+    y: 240.0
+  }
+  color {
+    x: 0.75
+    y: 0.5
+    z: 0.2
+  }
+  type: TYPE_BOX
+  id: "mine"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 270.0
+  }
+  scale {
+    x: 0.9
+    y: 0.9
+  }
+  size {
+    x: 260.0
+    y: 60.0
+  }
+  type: TYPE_TEXT
+  text: "\346\214\226\347\237\277"
+  font: "zh"
+  id: "mine_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 180.0
+    y: 90.0
+  }
+  size {
+    x: 180.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.4
+    z: 0.83
+  }
+  type: TYPE_BOX
+  id: "shop"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 180.0
+    y: 90.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 180.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "\345\225\206\345\272\227"
+  font: "zh"
+  id: "shop_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 90.0
+  }
+  size {
+    x: 180.0
+    y: 54.0
+  }
+  color {
+    x: 0.18
+    y: 0.55
+    z: 0.4
+  }
+  type: TYPE_BOX
+  id: "upgrade"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 90.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 180.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "\345\215\207\347\272\247"
+  font: "zh"
+  id: "upgrade_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 780.0
+    y: 90.0
+  }
+  size {
+    x: 180.0
+    y: 54.0
+  }
+  color {
+    x: 0.5
+    y: 0.4
+    z: 0.7
+  }
+  type: TYPE_BOX
+  id: "settings"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 780.0
+    y: 90.0
+  }
+  scale {
+    x: 0.6
+    y: 0.6
+  }
+  size {
+    x: 180.0
+    y: 35.0
+  }
+  color {
+    x: 0.95
+    y: 0.97
+  }
+  type: TYPE_TEXT
+  text: "\350\256\276\347\275\256"
+  font: "zh"
+  id: "settings_label"
+  parent: "root"
+  inherit_alpha: true
+}
+nodes {
+  position {
+    x: 480.0
+    y: 500.0
+  }
+  type: TYPE_TEMPLATE
+  id: "currency_header"
+  parent: "root"
+  inherit_alpha: true
+  template: "/game_modules/tycoon/ui/currency_header.gui"
+}
+nodes {
+  type: TYPE_TEXT
+  id: "currency_header/value"
+  parent: "currency_header"
+  template_node_child: true
+}
+nodes {
+  type: TYPE_TEXT
+  id: "currency_header/income"
+  parent: "currency_header"
+  template_node_child: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

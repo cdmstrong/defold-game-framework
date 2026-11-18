@@ -1,0 +1,2 @@
+name: "upgrade"
+instances { id: "view" prototype: "/examples/miner/upgrade.go" position { x: 0 y: 0 z: 0 } }

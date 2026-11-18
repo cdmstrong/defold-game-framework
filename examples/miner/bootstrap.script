@@ -1,0 +1,258 @@
+local App = require "framework.core.app"
+local Bus = require "framework.core.event_bus"
+local Pause = require "framework.core.pause"
+local UI = require "framework.ui.ui_manager"
+local Adapter = require "framework.ui.adapters.monarch"
+local Save = require "framework.save.save_manager"
+local Storage = require "framework.save.storage"
+local Settings = require "framework.services.settings"
+local Audio = require "framework.services.audio"
+local L10n = require "framework.data.localization"
+local Platform = require "framework.platform.platform"
+local RewardAd = require "framework.platform.reward_ad"
+local Analytics = require "framework.analytics.analytics"
+local Game = require "examples.miner.game"
+local monarch = require "monarch.monarch"
+local context = require "examples.miner.context"
+local routes = { mine = {}, shop = {}, upgrade = {}, settings = {}, dialog = { popup = true } }
+
+local function logger(topic, detail) print("MINER_DIAG " .. topic .. " " .. detail) end
+local function state_changed() context.bus:emit("changed", {}) end
+
+local messages = {
+    zh = { mute = "静音", unmute = "取消静音" },
+    en = { mute = "Mute", unmute = "Unmute" },
+}
+
+local function navigate(route)
+    local _, err = context.ui:open(route, nil)
+    if err then print("MINER_REJECT " .. err.code) end
+end
+
+-- 广告终态统一处理（同步终态与 pending 轮询结算都走 on_ad_close 监听）。
+local function handle_ad_result(reward, res)
+    if not res.success then
+        print("MINER_AD_FAIL reason=" .. tostring(res.reason))
+        return
+    end
+    local granted = reward:grant_once(res.request_id, function()
+        local gain = Game.double_reward(context.game)
+        print("MINER_AD_GRANT gain=" .. gain .. " coins=" .. context.game.coins)
+    end)
+    if granted then
+        context.game.last_seen = os.time()
+        context.save:commit("game", context.game)
+    end
+end
+
+function init(self)
+    context.adapter = Adapter.create(routes)
+
+    local storage = Storage.defold(sys, { app_id = "miner_tycoon" })
+
+    local settings_schema = {
+        volume_music = { default = 0.8, validate = function(v) return type(v) == "number" and v >= 0 and v <= 1 end },
+        volume_sfx = { default = 1.0, validate = function(v) return type(v) == "number" and v >= 0 and v <= 1 end },
+        muted = { default = false, validate = function(v) return type(v) == "boolean" end },
+        locale = { default = "zh", validate = function(v) return v == "zh" or v == "en" end },
+    }
+
+    self.app = App.create({ services = {
+        { name = "events", create = function()
+            local bus = Bus.create({ logger = logger }); bus.shutdown = bus.clear; return bus
+        end },
+        { name = "pause", create = function() return Pause.create() end },
+        { name = "save", create = function()
+            local save = Save.create(storage, {
+                defaults = Game.defaults,
+                validate = Game.validate,
+            })
+            save.shutdown = save.dispose
+            return save
+        end },
+        { name = "settings", create = function()
+            return Settings.create({ schema = settings_schema, storage = storage, persist_key = "miner_settings" })
+        end },
+        { name = "audio", create = function()
+            local backend = { play = function(id) return id end, stop = function() end, set_gain = function() end }
+            return Audio.create(backend, { music_volume = 0.8, sfx_volume = 1.0, muted = false })
+        end },
+        { name = "l10n", create = function()
+            return L10n.create({ messages = messages, default_locale = "en", locale = "zh", logger = logger })
+        end },
+        { name = "platform", create = function() return Platform.create({ sys = sys }) end },
+        { name = "reward_ad", create = function()
+            local ad_platform = sys.get_config_string("m4.ad_platform", "mock")
+            local reward = RewardAd.create({
+                platform = ad_platform,
+                sys = sys,
+                html5 = html5,
+                out = function(s) print(s) end,
+            })
+            -- 广告播放期间暂停主循环；终态统一经 handle_ad_result 结算发奖。
+            reward:on_ad_open(function()
+                if not context.ad_release then context.ad_release = context.pause:acquire("ad") end
+            end)
+            reward:on_ad_close(function(res)
+                if context.ad_release then context.ad_release(); context.ad_release = nil end
+                handle_ad_result(reward, res)
+            end)
+            return reward
+        end },
+        { name = "analytics", create = function() return Analytics.create({ out = function(s) print(s) end }) end },
+        { name = "ui", create = function(_, app)
+            local ui = UI.create(routes, context.adapter, { pause = app:service("pause"), logger = logger })
+            ui.shutdown = ui.dispose
+            -- ui.update（超时恢复 + adapter:update）由 app:update 自动驱动。
+            return ui
+        end },
+    } })
+    assert(self.app:start())
+
+    context.bus, context.pause, context.ui = self.app:service("events"), self.app:service("pause"), self.app:service("ui")
+    context.save = self.app:service("save")
+    context.settings = self.app:service("settings")
+    context.audio = self.app:service("audio")
+    context.l10n = self.app:service("l10n")
+    context.reward_ad = self.app:service("reward_ad")
+    context.analytics = self.app:service("analytics")
+    context.platform = self.app:service("platform")
+
+    context.locale = context.settings:get("locale")
+    context.l10n:set_locale(context.locale)
+    context.audio:set_volume("music", context.settings:get("volume_music"))
+    context.audio:set_volume("sfx", context.settings:get("volume_sfx"))
+    context.audio:set_muted(context.settings:get("muted"))
+
+    -- 载入存档并结算离线收益。读取失败时不用默认值覆盖（框架拒绝 commit）。
+    local snapshot, meta, save_err = context.save:load("game")
+    if save_err then
+        print("MINER_LOAD_ERROR code=" .. tostring(save_err.code) .. " " .. tostring(save_err.message))
+    end
+    context.game = Game.create(snapshot or Game.defaults())
+    local now = os.time()
+    local offline_gain, offline_secs = Game.settle_offline(context.game, now)
+    if offline_gain > 0 then
+        print("MINER_OFFLINE gain=" .. offline_gain .. " secs=" .. offline_secs)
+        context.offline_result = { gain = offline_gain, secs = offline_secs }
+    end
+    print("MINER_LOAD source=" .. (meta and meta.source or "none") .. " coins=" .. context.game.coins .. " miners=" .. context.game.miners)
+
+    local det = context.platform:detect()
+    print("MINER_PLATFORM kind=" .. det.kind .. " system=" .. det.system_name .. " ad_platform=" .. context.reward_ad:get_platform_id())
+
+    self.listener = msg.url()
+    monarch.add_listener(self.listener)
+    msg.post("#", "start")
+end
+
+local function persist()
+    -- 更新 last_seen 为当前时间再存档
+    context.game.last_seen = os.time()
+    local ok, err = context.save:commit("game", context.game)
+    if ok then print("MINER_SAVED coins=" .. context.game.coins .. " miners=" .. context.game.miners) else print("MINER_SAVE_FAIL code=" .. tostring(err and err.code)) end
+end
+
+function update(self, dt)
+    local ok, err = self.app:update(dt); assert(ok, err and err.message)
+
+    -- 自动生产：矿工每秒产出，用累积器
+    if not context.pause:is_paused() then
+        self.acc = (self.acc or 0) + dt
+        local ips = Game.income_per_second(context.game)
+        while self.acc >= 1 and ips > 0 do
+            self.acc = self.acc - 1
+            context.game.coins = context.game.coins + ips
+            context.game.total = context.game.total + ips
+            state_changed()
+        end
+    end
+
+    -- 每 5 秒自动存档
+    self.save_timer = (self.save_timer or 0) + dt
+    if self.save_timer >= 5 then
+        self.save_timer = 0
+        persist()
+    end
+end
+
+function on_message(self, message_id, message)
+    context.adapter:on_message(message_id, message)
+    if message_id == hash("start") then
+        navigate("mine")
+        if context.offline_result and context.offline_result.gain > 0 then
+            context.dialog_text = "离线 " .. context.offline_result.secs .. " 秒，获得 " .. context.offline_result.gain .. " 金币"
+            context.ui:dialog("dialog", {}, function() end)
+            context.offline_result = nil
+        end
+    elseif message_id == hash("navigate") then
+        navigate(message.route)
+    elseif message_id == hash("back") then
+        context.ui:back()
+    elseif message_id == hash("click") then
+        local gain = Game.click(context.game)
+        context.audio:unlock()
+        context.audio:play_sfx("click")
+        print("MINER_CLICK gain=" .. gain .. " coins=" .. context.game.coins)
+        context.analytics:track("mine_click", { gain = gain })
+        state_changed()
+    elseif message_id == hash("hire") then
+        local cost, err = Game.hire_miner(context.game)
+        if cost then
+            context.audio:unlock()
+            context.audio:play_sfx("click")
+            print("MINER_HIRE cost=" .. cost .. " miners=" .. context.game.miners)
+            context.analytics:track("hire_miner", { cost = cost })
+            persist()
+            state_changed()
+        else
+            print("MINER_HIRE_FAIL " .. tostring(err and err.code))
+        end
+    elseif message_id == hash("up_click") then
+        local cost, err = Game.upgrade_click(context.game)
+        if cost then print("MINER_UP_CLICK level=" .. context.game.click_level); context.analytics:track("upgrade_click", {}); persist() end
+        state_changed()
+    elseif message_id == hash("up_miner") then
+        local cost, err = Game.upgrade_miner(context.game)
+        if cost then print("MINER_UP_MINER level=" .. context.game.miner_level); context.analytics:track("upgrade_miner", {}); persist() end
+        state_changed()
+    elseif message_id == hash("up_offline") then
+        local cost, err = Game.upgrade_offline(context.game)
+        if cost then print("MINER_UP_OFFLINE level=" .. context.game.offline_level); context.analytics:track("upgrade_offline", {}); persist() end
+        state_changed()
+    elseif message_id == hash("mute") then
+        local muted = not context.settings:get("muted")
+        context.settings:set("muted", muted)
+        context.audio:set_muted(muted)
+        print("MINER_MUTE " .. tostring(muted))
+        state_changed()
+    elseif message_id == hash("locale") then
+        local loc = (context.locale == "zh") and "en" or "zh"
+        context.settings:set("locale", loc)
+        context.locale = loc
+        context.l10n:set_locale(loc)
+        print("MINER_LOCALE " .. loc)
+        state_changed()
+    elseif message_id == hash("ad") then
+        -- 看广告：发起激励视频。mock 平台同步返回 rewarded；真实渠道返回
+        -- pending=true，由门面 update() 轮询结算（grant 在 on_ad_close 统一处理）。
+        context.analytics:track("ad_show", { tag = "double" })
+        local res = context.reward_ad:show_rewarded({ tag = "double" })
+        if res.pending then
+            print("MINER_AD pending request_id=" .. tostring(res.request_id))
+        else
+            print("MINER_AD reason=" .. tostring(res.reason) .. " success=" .. tostring(res.success))
+        end
+        state_changed()
+    elseif message_id == hash("confirm") then
+        context.ui:resolve_dialog("confirmed")
+    end
+    if context.ui:is_busy() then self.was_busy = true end
+end
+
+function final(self)
+    monarch.remove_listener(self.listener)
+    if context.ad_release then context.ad_release(); context.ad_release = nil end
+    pcall(persist)
+    assert(self.app:shutdown())
+end

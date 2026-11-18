@@ -1,0 +1,295 @@
+local App = require "framework.core.app"
+local Bus = require "framework.core.event_bus"
+local Pause = require "framework.core.pause"
+local UI = require "framework.ui.ui_manager"
+local Adapter = require "framework.ui.adapters.monarch"
+local Save = require "framework.save.save_manager"
+local Storage = require "framework.save.storage"
+local Settings = require "framework.services.settings"
+local Audio = require "framework.services.audio"
+local L10n = require "framework.data.localization"
+local Platform = require "framework.platform.platform"
+local RewardAd = require "framework.platform.reward_ad"
+local Analytics = require "framework.analytics.analytics"
+local monarch = require "monarch.monarch"
+local context = require "examples.ui_demo.context"
+local messages = require "examples.ui_demo.l10n"
+local routes = { home = {}, components = {}, settings = {}, dialog = { popup = true } }
+local function logger(topic, detail) print("M1_DIAGNOSTIC " .. topic .. " " .. detail) end
+local function state_changed() context.bus:emit("changed", {}) end
+local function report_error(err) if err then print("M1_REJECT " .. err.code) end end
+local function navigate(route)
+    local _, err = context.ui:open(route, nil, function(_, failure) report_error(failure) end)
+    report_error(err)
+end
+local function dialog()
+    local _, err = context.ui:dialog("dialog", { title = "Confirm action" }, function(result, failure)
+        if failure then report_error(failure) else print("M1_DIALOG " .. result.status) end
+        state_changed()
+    end)
+    report_error(err)
+end
+-- 广告终态统一处理（同步终态与 pending 轮询结算都走 on_ad_close 监听）。
+local function handle_ad_result(reward, res)
+    if not res.success then
+        print("M4_AD_FAIL reason=" .. tostring(res.reason))
+        return
+    end
+    local granted = reward:grant_once(res.request_id, function()
+        context.clicks = context.clicks + 1
+        context.save:commit("game", { clicks = context.clicks })
+    end)
+    print("M4_GRANT granted=" .. tostring(granted) .. " clicks=" .. context.clicks)
+end
+
+function init(self)
+    context.clicks, context.views, context.ticks = 0, {}, 0
+    context.adapter = Adapter.create(routes)
+
+    -- Storage adapter backed by Defold sys.save/sys.load (persists to
+    -- localStorage in HTML5).
+    local storage = Storage.defold(sys)
+
+    -- Settings schema: known keys with validation.
+    local settings_schema = {
+        volume_music = { default = 0.8, validate = function(v) return type(v) == "number" and v >= 0 and v <= 1 end },
+        volume_sfx = { default = 1.0, validate = function(v) return type(v) == "number" and v >= 0 and v <= 1 end },
+        muted = { default = false, validate = function(v) return type(v) == "boolean" end },
+        locale = { default = "zh", validate = function(v) return v == "zh" or v == "en" end },
+    }
+
+    self.app = App.create({ services = {
+        { name = "events", create = function()
+            local bus = Bus.create({ logger = logger }); bus.shutdown = bus.clear; return bus
+        end },
+        { name = "pause", create = function() return Pause.create() end },
+        { name = "save", create = function()
+            local save = Save.create(storage, { defaults = function() return { clicks = 0 } end })
+            save.shutdown = save.dispose
+            return save
+        end },
+        { name = "settings", create = function()
+            local settings = Settings.create({ schema = settings_schema, storage = storage, persist_key = "demo_settings" })
+            return settings
+        end },
+        { name = "audio", create = function()
+            -- No sound resources in the demo; the backend is a no-op that still
+            -- records plays so integration can assert the unlock path.
+            local plays = {}
+            local backend = {
+                play = function(id) plays[#plays + 1] = id; return id end,
+                stop = function() end,
+                set_gain = function() end,
+            }
+            local audio = Audio.create(backend, {
+                music_volume = 0.8, sfx_volume = 1.0, muted = false,
+            })
+            audio._plays = plays
+            return audio
+        end },
+        { name = "l10n", create = function()
+            return L10n.create({ messages = messages, default_locale = "en", locale = "zh", logger = logger })
+        end },
+        { name = "platform", create = function()
+            return Platform.create({ sys = sys })
+        end },
+        { name = "reward_ad", create = function()
+            -- 广告平台可配置：taptap / leyuan / mock / none。
+            -- 默认 mock（本地跑通流程）；打包前改成目标渠道并配好 config。
+            local ad_platform = sys.get_config_string("m4.ad_platform", "mock")
+            local ad_unit_id = sys.get_config_string("m4.ad_unit_id", "")
+            local reward = RewardAd.create({
+                platform = ad_platform,
+                sys = sys,
+                html5 = html5, -- Defold HTML5 全局模块（桌面/原生为 nil）
+                config = {
+                    ad_unit_id = ad_unit_id,
+                    sdk_url = sys.get_config_string("m4.leyuan_sdk_url", "https://cdn.233xyx.com/h5ad/metah5ad_v1.min.js"),
+                },
+                out = function(s) print(s) end,
+                sleep = function(sec) context.ad_pending = sec end,
+            })
+            -- 广告播放期间暂停主循环；终态统一经 handle_ad_result 结算发奖。
+            reward:on_ad_open(function()
+                if not context.ad_release then context.ad_release = context.pause:acquire("ad") end
+            end)
+            reward:on_ad_close(function(res)
+                if context.ad_release then context.ad_release(); context.ad_release = nil end
+                handle_ad_result(reward, res)
+            end)
+            return reward
+        end },
+        { name = "analytics", create = function()
+            local a = Analytics.create({ out = function(s) print(s) end })
+            return a
+        end },
+        { name = "ui", create = function(_, app)
+            local ui = UI.create(routes, context.adapter, { pause = app:service("pause"), logger = logger })
+            ui.shutdown = ui.dispose
+            -- ui.update（超时恢复 + adapter:update）由 app:update 自动驱动。
+            return ui
+        end },
+    } })
+    assert(self.app:start())
+
+    context.bus, context.pause, context.ui = self.app:service("events"), self.app:service("pause"), self.app:service("ui")
+    context.save = self.app:service("save")
+    context.settings = self.app:service("settings")
+    context.audio = self.app:service("audio")
+    context.l10n = self.app:service("l10n")
+    context.platform = self.app:service("platform")
+    context.reward_ad = self.app:service("reward_ad")
+    context.analytics = self.app:service("analytics")
+
+    -- Restore persisted state: settings values into context + audio, and the
+    -- saved click count.
+    context.locale = context.settings:get("locale")
+    context.l10n:set_locale(context.locale)
+    context.audio:set_volume("music", context.settings:get("volume_music"))
+    context.audio:set_volume("sfx", context.settings:get("volume_sfx"))
+    context.audio:set_muted(context.settings:get("muted"))
+
+    local snapshot, meta, save_err = context.save:load("game")
+    if save_err then
+        -- 读取失败：不用默认值继续（框架会拒绝 commit，防止覆盖原档）。
+        print("M3_LOAD_ERROR code=" .. tostring(save_err.code) .. " " .. tostring(save_err.message))
+    end
+    if snapshot then context.clicks = snapshot.clicks or 0 end
+    print("M3_LOAD source=" .. (meta and meta.source or "none") .. " clicks=" .. context.clicks .. " locale=" .. context.locale)
+
+    local det = context.platform:detect()
+    print("M4_PLATFORM kind=" .. det.kind .. " system=" .. det.system_name .. " ad_platform=" .. context.reward_ad:get_platform_id())
+
+    self.listener = msg.url()
+    monarch.add_listener(self.listener)
+    self.autotest = sys.get_config_int("m1.autotest", 0) == 1
+    self.step, self.cycles, self.clock = 0, 0, 0
+    self.was_busy = false
+    msg.post("#", "start")
+end
+
+local function test_step(self)
+    assert(context.bus:listener_count() == (context.adapter:top() == "dialog" and 2 or 1), "Leaked GUI subscriptions")
+    if self.step == 0 then
+        local _, err = context.ui:open("missing")
+        assert(err.code == "unknown_route")
+        _, err = context.ui:back(); assert(err.code == "no_history")
+        navigate("components")
+        _, err = context.ui:open("settings"); assert(err.code == "busy")
+        self.step = 1
+    elseif self.step == 1 then navigate("settings"); self.step = 2
+    elseif self.step == 2 then assert(context.ui:back()); self.step = 3
+    elseif self.step == 3 then
+        self.manual_release = context.pause:acquire("test")
+        dialog(); self.step = 4
+    elseif self.step == 4 then
+        assert(context.pause:is_paused())
+        assert(context.ui:resolve_dialog("ok")); self.step = 5
+    elseif self.step == 5 then
+        assert(context.pause:is_paused(), "Dialog released another pause")
+        self.manual_release(); self.manual_release = nil
+        assert(not context.pause:is_paused())
+        assert(context.ui:back()); self.step = 6
+    else
+        self.cycles = self.cycles + 1
+        if self.cycles == 30 then
+            print("M1_INTEGRATION_PASS cycles=30 listeners=" .. context.bus:listener_count())
+            self.autotest = false
+            msg.post("@system:", "exit", { code = 0 })
+        else self.step = 0 end
+    end
+end
+
+function update(self, dt)
+    local ok, err = self.app:update(dt); assert(ok, err and err.message)
+    local busy = context.ui:is_busy()
+    if self.was_busy and not busy then
+        print("M1_READY " .. tostring(context.adapter:top()) .. " listeners=" .. context.bus:listener_count() .. " paused=" .. tostring(context.pause:is_paused()))
+        state_changed()
+    end
+    self.was_busy = busy
+    if not context.pause:is_paused() then
+        self.clock = self.clock + dt
+        if self.clock >= 1 then self.clock = self.clock - 1; context.ticks = context.ticks + 1; state_changed() end
+    end
+    if self.autotest and context.adapter:top() and not busy then
+        test_step(self)
+        self.was_busy = context.ui:is_busy()
+    end
+end
+
+-- Save the demo payload and notify. Used by count and settings changes.
+local function persist_clicks()
+    local ok, err = context.save:commit("game", { clicks = context.clicks })
+    if ok then print("M3_SAVED clicks=" .. context.clicks) else report_error(err) end
+end
+
+function on_message(self, message_id, message)
+    context.adapter:on_message(message_id, message)
+    if message_id == hash("start") then navigate("home")
+    elseif message_id == hash("navigate") then navigate(message.route)
+    elseif message_id == hash("back") then local _, err = context.ui:back(); report_error(err)
+    elseif message_id == hash("dialog") then dialog()
+    elseif message_id == hash("confirm") then local _, err = context.ui:resolve_dialog("confirmed"); report_error(err)
+    elseif message_id == hash("count") then
+        context.clicks = context.clicks + 1
+        print("M1_COUNT " .. context.clicks)
+        context.audio:unlock() -- browser first-interaction unlock
+        context.audio:play_sfx("click")
+        persist_clicks()
+        state_changed()
+    elseif message_id == hash("pause") then
+        if self.manual_release then self.manual_release(); self.manual_release = nil
+        else self.manual_release = context.pause:acquire("manual") end
+        state_changed()
+    elseif message_id == hash("theme") then
+        context.theme = (context.theme == "dark") and "light" or "dark"
+        print("M2_THEME " .. context.theme)
+        state_changed()
+    elseif message_id == hash("tab") then
+        print("M2_TAB " .. tostring(message.index))
+    elseif message_id == hash("volume_down") or message_id == hash("volume_up") then
+        local group = message.group or "music"
+        local cur = context.settings:get("volume_" .. group) or 0.8
+        local delta = (message_id == hash("volume_down")) and -0.1 or 0.1
+        local next_v = math.max(0, math.min(1, cur + delta))
+        context.settings:set("volume_" .. group, next_v)
+        context.audio:set_volume(group, next_v)
+        print("M3_VOLUME " .. group .. "=" .. next_v)
+        state_changed()
+    elseif message_id == hash("mute") then
+        local muted = not context.settings:get("muted")
+        context.settings:set("muted", muted)
+        context.audio:set_muted(muted)
+        print("M3_MUTE " .. tostring(muted))
+        state_changed()
+    elseif message_id == hash("locale") then
+        local loc = (context.locale == "zh") and "en" or "zh"
+        context.settings:set("locale", loc)
+        context.locale = loc
+        context.l10n:set_locale(loc)
+        print("M3_LOCALE " .. loc)
+        state_changed()
+    elseif message_id == hash("ad") then
+        -- 看广告：发起激励视频。mock 平台同步返回 rewarded；真实渠道返回
+        -- pending=true，由门面 update() 轮询结算（grant 在 on_ad_close 统一处理）。
+        context.analytics:track("ad_show", { tag = "revive" })
+        local res = context.reward_ad:show_rewarded({ tag = "revive" })
+        if res.pending then
+            print("M4_AD pending request_id=" .. tostring(res.request_id))
+        else
+            print("M4_AD reason=" .. tostring(res.reason) .. " success=" .. tostring(res.success) .. " platform=" .. tostring(res.platform))
+        end
+        state_changed()
+    end
+    if context.ui:is_busy() then self.was_busy = true end
+end
+
+function final(self)
+    monarch.remove_listener(self.listener)
+    if self.manual_release then self.manual_release() end
+    -- Persist clicks on shutdown so a clean exit also saves.
+    pcall(persist_clicks)
+    assert(self.app:shutdown())
+    print("M1_SHUTDOWN listeners=" .. context.bus:listener_count())
+end

@@ -1,0 +1,39 @@
+{
+  "status": "integration_verified_m0",
+  "checked_on": "2026-11-18",
+  "defold": {
+    "version": "1.14.1",
+    "engine_sha": "ee283d4dad9fa451dd6399d83602e1dc25133681",
+    "evidence": "/Applications/Defold.app/Contents/Resources/config"
+  },
+  "libraries": [
+    {
+      "repository": "Insality/druid",
+      "tag": "1.3.0",
+      "commit": "9a5171377fc2f7fba68fea4f2c117ee6a25d28a4",
+      "url": "https://codeload.github.com/Insality/druid/zip/9a5171377fc2f7fba68fea4f2c117ee6a25d28a4",
+      "archive_sha256": "2b85a9862caa220f542b0d589ac8371367fe67de303e6fec4e41a96bbd2d1f1f"
+    },
+    {
+      "repository": "britzl/monarch",
+      "tag": "6.0.3",
+      "commit": "5c33c39830489925493163e741d5b22b4e5e3b9d",
+      "url": "https://codeload.github.com/britzl/monarch/zip/5c33c39830489925493163e741d5b22b4e5e3b9d",
+      "archive_sha256": "0da8ea2ecf8805b9ba048102409cbf85462a95a9e600e2db753110f3e377a216"
+    },
+    {
+      "repository": "Insality/defold-event",
+      "tag": "21",
+      "commit": "384813497c25ff41d34ab1efdb1163217dc9dd26",
+      "url": "https://codeload.github.com/Insality/defold-event/zip/384813497c25ff41d34ab1efdb1163217dc9dd26",
+      "archive_sha256": "1188406ce7ee2a146006669b41a9eb8ab52ac849ac6d93f8dc1e3f3fba0ca6ca"
+    }
+  ],
+  "note": "Consumed by scripts/project.py; Defold reads generated game.project dependency entries. M0 verified only; M1+ remain pending.",
+  "bob": {
+    "url": "https://d.defold.com/archive/ee283d4dad9fa451dd6399d83602e1dc25133681/bob/bob.jar",
+    "sha256": "f47e0d21fee84c3c1f56adfe5feb1c328f83df9e4fe26f2616a5392b9b710b45",
+    "java": "JDK 25 (validated with Defold bundled JDK 25.0.4.1+1)"
+  },
+  "verification": "docs/verification/m0.md"
+}
