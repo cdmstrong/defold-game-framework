@@ -33,7 +33,7 @@ local NORMALIZE_JS = [[
   for (var i=0;i<5 && r && typeof r === 'object' && r.response !== undefined;i++) { r = r.response; }
   d = r && r.data !== undefined ? r.data : r;
   for (var j=0;j<5 && d && typeof d === 'object' && d.response !== undefined;j++) { d = d.response; }
-  function toNum(v){ var n = Number(v); return (v===null||v===undefined||v===''||isNaN(n)) ? null : n; }
+  function toNum(v){ var n = Number(v); return (v === null || v === undefined || (typeof v === 'string' && v === '') || isNaN(n)) ? null : n; }
   var code = toNum(r && (r.code !== undefined ? r.code : r.errCode));
   var st = null;
   if (d && typeof d === 'object') { st = toNum(d.status !== undefined ? d.status : (d.rewardStatus !== undefined ? d.rewardStatus : d.state)); }
@@ -84,11 +84,15 @@ end
 -- window.__ad_result__。发起时先清旧结果并记录 __ad_active__。
 -- 同时把每一次回调的归一化结果追加到 __ad_event_log__，便于真机排查
 -- 「status=0/3 到了但 4 没到」还是「4 到了但发奖链路断」。
+-- 关键加固（真机 v10 实测教训）：回调里任何未捕获异常（如 JSON.stringify 循环
+-- 引用抛 TypeError）都会打断 settle → 关闭/奖励事件被吞 → 永不结算。
+-- 所以回调整体 try/catch，异常时也要 settle（带 stack），绝不让事件静默丢失。
 local function make_show_js(ad_type, request_id, timeout_ms, normalize)
     return [[
 (function() {
   var sdk = window.MetaH5Ad;
   window.__ad_event_log__ = [];
+  function safeStr(o) { try { return typeof o === 'string' ? o : JSON.stringify(o); } catch (e) { return String(o); } }
   if (!sdk || typeof sdk.showAd !== 'function') { window.__ad_result__ = { request_id:"__REQ_ID__", ok:false, reason:'sdk_missing' }; return; }
   window.__ad_result__ = null;
   window.__ad_active__ = "__REQ_ID__";
@@ -97,16 +101,29 @@ local function make_show_js(ad_type, request_id, timeout_ms, normalize)
   setTimeout(function(){ settle({ ok:false, reason:'timeout' }); }, __TIMEOUT__);
   try {
     sdk.showAd(__ADTYPE__, function(raw) {
-      window.__ad_raw__ = raw;
-      var p = __NORMALIZE__(raw);
-      window.__ad_event_log__.push({ code:p.code, status:p.status, isRewarded:p.isRewarded, msg:p.message, raw:(typeof raw==='string'? raw : JSON.stringify(raw)).slice(0,160) });
-      if (p.code !== null && p.code !== 0) { settle({ ok:false, reason:'failed', status:p.status, raw:raw }); return; }
-      if (p.isRewarded) { settle({ ok:true, reason:'rewarded', status:4, raw:raw }); return; }
-      if (p.status === 0 || p.status === 3) { return; } /* 过程态继续等 */
-      if (p.status === 1) { settle({ ok:false, reason:'closed', status:1, raw:raw }); return; }
-      if (p.status === 2) { settle({ ok:false, reason:'skipped', status:2, raw:raw }); return; }
-      if (p.status === -1) { settle({ ok:false, reason:'failed', status:-1, raw:raw }); return; }
-      /* 未知状态交给超时兜底 */
+      try {
+        window.__ad_raw__ = safeStr(raw);
+        var p = __NORMALIZE__(raw);
+        window.__ad_event_log__.push({ code:p.code, status:p.status, isRewarded:p.isRewarded, msg:p.message, raw:safeStr(raw).slice(0,160) });
+        if (p.code !== null && p.code !== 0) { settle({ ok:false, reason:'failed', status:p.status, raw:safeStr(raw) }); return; }
+        if (p.isRewarded) { settle({ ok:true, reason:'rewarded', status:4, raw:safeStr(raw) }); return; }
+        if (p.status === 0 || p.status === 3) { return; } /* 过程态继续等 */
+        if (p.status === 1) { settle({ ok:false, reason:'closed', status:1, raw:safeStr(raw) }); return; }
+        if (p.status === 2) { settle({ ok:false, reason:'skipped', status:2, raw:safeStr(raw) }); return; }
+        if (p.status === -1) { settle({ ok:false, reason:'failed', status:-1, raw:safeStr(raw) }); return; }
+        /* 未知状态交给超时兜底 */
+      } catch(cbErr) {
+        /* 归一化/记录抛异常：不能吞掉事件，兜底结算并把堆栈带给 Lua 侧。
+           若 raw 里明确带 status:4，仍然按奖励结算（异常不能吃掉用户的奖） */
+        var rawTxt = safeStr(raw);
+        window.__ad_event_log__.push({ code:null, status:-3, isRewarded:false, msg:'callback_exception:' + String(cbErr) });
+        var stk = cbErr && cbErr.stack ? String(cbErr.stack).slice(0, 200) : '';
+        if (rawTxt.indexOf('"status":4') >= 0 || rawTxt.indexOf('status:4') >= 0) {
+          settle({ ok:true, reason:'rewarded_fallback', status:4, raw:rawTxt, error:String(cbErr) + (stk ? ' | ' + stk : '') });
+        } else {
+          settle({ ok:false, reason:'callback_exception', error:String(cbErr) + (stk ? ' | ' + stk : '') });
+        }
+      }
     });
   } catch(e) { settle({ ok:false, reason:'exception', error:String(e) }); }
 })()
