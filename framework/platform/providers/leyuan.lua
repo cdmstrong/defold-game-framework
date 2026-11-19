@@ -26,8 +26,13 @@ local M = {}
 -- SDK 回调结果归一化：SDK 回调常是「JSON 字符串套一层 response」的形状，
 -- 字段名也不统一，这里抹平成 { code, status, message, is_rewarded }。
 -- 在 JS 侧做归一化，Lua 侧只消费这一套判断。
+-- 注意：这里必须是【纯函数表达式】（不能自带调用）——调用点 make_show_js
+-- 里是 var p = __NORMALIZE__(raw)。曾经写成自执行 IIFE (function(raw){...})(__RAW__)，
+-- 替换后变成 ...(raw)(raw) 双重调用：IIFE 返回结果对象再被当函数调用，
+-- 每次回调必抛 TypeError「... is not a function」，settle 全部被打断——
+-- 这就是真机「看完广告没奖励」的最终根因（Node vm 复现钉死）。
 local NORMALIZE_JS = [[
-(function(raw) {
+function(raw) {
   var r = raw, d = raw;
   try { if (typeof raw === 'string') { r = JSON.parse(raw); } } catch(e) {}
   for (var i=0;i<5 && r && typeof r === 'object' && r.response !== undefined;i++) { r = r.response; }
@@ -42,8 +47,7 @@ local NORMALIZE_JS = [[
   var explicit = !!(r && (r.rewarded === true || r.reward === true || r.completed === true));
   if (!explicit && d && typeof d === 'object') { explicit = !!(d.rewarded === true || d.reward === true || d.completed === true); }
   return { code: code, status: st, message: msg, isRewarded: (st === 4 || explicit) };
-})(__RAW__)
-]]
+}]]
 
 -- SDK 内部会调用 logBlue/logGreen/logRed/logYellow 等全局日志函数，
 -- 缺失时直接 ReferenceError，会打断 showAd 回调执行（表现为「看完没奖励」）。
@@ -92,7 +96,13 @@ local function make_show_js(ad_type, request_id, timeout_ms, normalize)
 (function() {
   var sdk = window.MetaH5Ad;
   window.__ad_event_log__ = [];
-  function safeStr(o) { try { return typeof o === 'string' ? o : JSON.stringify(o); } catch (e) { return String(o); } }
+  function safeStr(o) {
+    try {
+      var s = typeof o === 'string' ? o : JSON.stringify(o);
+      if (typeof s === 'string') { return s; }
+      return String(o);
+    } catch (e) { try { return String(o); } catch (e2) { return '[unprintable]'; } }
+  }
   if (!sdk || typeof sdk.showAd !== 'function') { window.__ad_result__ = { request_id:"__REQ_ID__", ok:false, reason:'sdk_missing' }; return; }
   window.__ad_result__ = null;
   window.__ad_active__ = "__REQ_ID__";
@@ -166,7 +176,8 @@ function M.create(ctx, config)
         pending_show = nil, -- 待播请求 { request_id, ad_type, timeout_ms, deadline }：SDK 未就绪时先登记，就绪后真正发起
     }
 
-    local NORMALIZE_INJECTED = NORMALIZE_JS:gsub("__RAW__", "raw")
+    -- 纯函数表达式包一层括号（调用点 __NORMALIZE__(raw)）；替换无魔法字符，plain replace 即可
+    local NORMALIZE_INJECTED = "(" .. NORMALIZE_JS .. ")"
 
     -- 执行 JS，返回 table（假执行器直接给表）或解析 JSON 字符串（html5.run）。
     local function run_js(code)
