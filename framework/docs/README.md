@@ -28,6 +28,10 @@
 
 | 日期 | 主题 | 文档 | 关键词 | 适用版本 |
 |---|---|---|---|---|
+| 2026-11-19 | 233 乐园 MetaH5Ad 激励视频「看完没奖励/只有第一次能看」六层坑：全局日志函数缺失、SDK 半就绪、晚到事件覆盖、`0===''` 弱等号、回调异常吞事件、**JS 模板替换产生双重调用 IIFE（最终根因）**；附 Node vm 产物断言方法论与真机排障工具链 | [2026-11-19-233-leyuan-rewarded-ad-pitfalls.md](2026-11-19-233-leyuan-rewarded-ad-pitfalls.md) | 233乐园、MetaH5Ad、激励视频、html5.run、JS 模板替换、IIFE 双重调用、异步轮询、settle、status=4、看完没奖励、busy、回调异常、logBlue、JSON.stringify 循环引用、Node vm 复现 | Defold 1.14.1（wasm-web） |
+| 2026-11-19 | .gui 文件 color.w 半透明不生效 | 2026-11-19-gui-file-color-w-alpha.md | gui alpha 透明 遮罩 blend set_color | 1.14.1 |
+| 2026-11-19 | `msg.post(set_parent)` 传错字段名被静默忽略走默认值（keep_world_transform 默认 1）→ 子物件以创建点世界坐标挂载、不可见但判定仍生效（隐形杀手）；改用 `go.set_parent()` 函数（boolean 默认 false） | [2026-11-19-set-parent-keep-world-transform.md](2026-11-19-set-parent-keep-world-transform.md) | set_parent、keep_world_transform、keep_world_position、factory.create 局部坐标、go.get_world_position、隐形判定、消息字段静默忽略、消息与函数默认值不一致 | Defold 1.14.1 |
+| 2026-11-19 | 改设计分辨率必须同步 GUI/判定坐标；「限制最大宽度」用 fixed_fit 而非 viewport 收缩；GUI/世界相机投影必须分开（GUI=窗口正交，共用 fixed_fit 会 fit²）；可选补偿方案（共享 fit 系数 + GUI 逆向缩放，未实现） | [2026-11-19-design-resolution-sync.md](2026-11-19-design-resolution-sync.md) | display.width、GUI 等比换算、fixed_fit、信箱、glViewport 不裁切、get_gui_projection、fit²、Adjust Reference、输入坐标自动转换、按钮判定区间、共享 fit 系数、逆向缩放、bob 增量不重编 gui | Defold 1.14.1 |
 | 2026-11-18 | collection proxy 场景内点击完全无反应 | [2026-11-18-collection-proxy-input-focus.md](2026-11-18-collection-proxy-input-focus.md) | `acquire_input_focus`、输入栈、collection proxy、`on_input`、GUI 点击、场景切换 | Defold 1.14.1（机制通用于 1.x） |
 
 ### 流程 / SOP
