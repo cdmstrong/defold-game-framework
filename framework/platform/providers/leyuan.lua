@@ -98,7 +98,7 @@ local function make_show_js(ad_type, request_id, timeout_ms, normalize)
   window.__ad_active__ = "__REQ_ID__";
   var settled = false;
   function settle(r){ if(settled) return; settled = true; r.request_id = "__REQ_ID__"; r.events = window.__ad_event_log__; window.__ad_result__ = r; }
-  setTimeout(function(){ settle({ ok:false, reason:'timeout' }); }, __TIMEOUT__);
+  setTimeout(function(){ settle({ ok:false, reason:'timeout', error:window.__ad_error__ || '' }); }, __TIMEOUT__);
   try {
     sdk.showAd(__ADTYPE__, function(raw) {
       try {
@@ -113,15 +113,15 @@ local function make_show_js(ad_type, request_id, timeout_ms, normalize)
         if (p.status === -1) { settle({ ok:false, reason:'failed', status:-1, raw:safeStr(raw) }); return; }
         /* 未知状态交给超时兜底 */
       } catch(cbErr) {
-        /* 归一化/记录抛异常：不能吞掉事件，兜底结算并把堆栈带给 Lua 侧。
-           若 raw 里明确带 status:4，仍然按奖励结算（异常不能吃掉用户的奖） */
+        /* 回调抛异常（真机 v10/v11 实测：4 次回调全抛，原因待 stack 确认）。
+           关键规则：过程态异常绝不锁定失败终态——否则第一次回调（st0 展示）
+           就把终态锁死，后面 st4 的奖励兜底永远没机会。只有 raw 明确带
+           status:4 才立即按奖励结算；其余记下错误，交给后续回调或超时兜底。 */
         var rawTxt = safeStr(raw);
-        window.__ad_event_log__.push({ code:null, status:-3, isRewarded:false, msg:'callback_exception:' + String(cbErr) });
-        var stk = cbErr && cbErr.stack ? String(cbErr.stack).slice(0, 200) : '';
-        if (rawTxt.indexOf('"status":4') >= 0 || rawTxt.indexOf('status:4') >= 0) {
-          settle({ ok:true, reason:'rewarded_fallback', status:4, raw:rawTxt, error:String(cbErr) + (stk ? ' | ' + stk : '') });
-        } else {
-          settle({ ok:false, reason:'callback_exception', error:String(cbErr) + (stk ? ' | ' + stk : '') });
+        window.__ad_error__ = String(cbErr) + (cbErr && cbErr.stack ? ' | ' + String(cbErr.stack).slice(0, 200) : '');
+        window.__ad_event_log__.push({ code:null, status:-3, isRewarded:false, msg:('cb_exc:' + String(cbErr)).slice(0, 80) });
+        if (!settled && (rawTxt.indexOf('"status":4') >= 0 || rawTxt.indexOf('status:4') >= 0)) {
+          settle({ ok:true, reason:'rewarded_fallback', status:4, raw:rawTxt, error:window.__ad_error__ });
         }
       }
     });
