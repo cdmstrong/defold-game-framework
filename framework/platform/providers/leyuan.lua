@@ -67,20 +67,24 @@ end
 
 -- 发起播放：注册 showAd 回调，settle 时把结果带上 request_id 写入
 -- window.__ad_result__。发起时先清旧结果并记录 __ad_active__。
+-- 同时把每一次回调的归一化结果追加到 __ad_event_log__，便于真机排查
+-- 「status=0/3 到了但 4 没到」还是「4 到了但发奖链路断」。
 local function make_show_js(ad_type, request_id, timeout_ms, normalize)
     return [[
 (function() {
   var sdk = window.MetaH5Ad;
+  window.__ad_event_log__ = [];
   if (!sdk || typeof sdk.showAd !== 'function') { window.__ad_result__ = { request_id:"__REQ_ID__", ok:false, reason:'sdk_missing' }; return; }
   window.__ad_result__ = null;
   window.__ad_active__ = "__REQ_ID__";
   var settled = false;
-  function settle(r){ if(settled) return; settled = true; r.request_id = "__REQ_ID__"; window.__ad_result__ = r; }
+  function settle(r){ if(settled) return; settled = true; r.request_id = "__REQ_ID__"; r.events = window.__ad_event_log__; window.__ad_result__ = r; }
   setTimeout(function(){ settle({ ok:false, reason:'timeout' }); }, __TIMEOUT__);
   try {
     sdk.showAd(__ADTYPE__, function(raw) {
       window.__ad_raw__ = raw;
       var p = __NORMALIZE__(raw);
+      window.__ad_event_log__.push({ code:p.code, status:p.status, isRewarded:p.isRewarded, msg:p.message, raw:(typeof raw==='string'? raw : JSON.stringify(raw)).slice(0,160) });
       if (p.code !== null && p.code !== 0) { settle({ ok:false, reason:'failed', status:p.status, raw:raw }); return; }
       if (p.isRewarded) { settle({ ok:true, reason:'rewarded', status:4, raw:raw }); return; }
       if (p.status === 0 || p.status === 3) { return; } /* 过程态继续等 */
@@ -259,6 +263,7 @@ function M.create(ctx, config)
             reason = res.reason or "unknown",
             raw = res.raw,
             error = res.error,
+            events = res.events, -- 完整回调序列（诊断用）
         }
     end
 

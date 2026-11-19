@@ -141,6 +141,7 @@ function M.create(options)
         result.duration_ms = self.now_ms() - (result.started_at or self.now_ms())
         result.raw = provider_result.raw
         result.error = provider_result.error
+        result.events = provider_result.events
 
         self.busy = false
         self.busy_tag = ""
