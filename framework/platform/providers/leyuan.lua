@@ -127,6 +127,7 @@ function M.create(ctx, config)
         loading_started = false, -- script 标签已注入（结果未确认）
         loading_started_at = 0,
         active_request = nil,
+        pending_show = nil, -- 待播请求 { request_id, ad_type, timeout_ms, deadline }：SDK 未就绪时先登记，就绪后真正发起
     }
 
     local NORMALIZE_INJECTED = NORMALIZE_JS:gsub("__RAW__", "raw")
@@ -164,10 +165,13 @@ function M.create(ctx, config)
         return false
     end
 
-    -- 每帧检查 SDK 是否就绪（真实环境：MetaH5Ad 已注入；纯 Lua：假执行器模拟）。
+    -- 每帧检查 SDK 是否就绪（真实环境：MetaH5Ad 已注入且关键方法可用；纯 Lua：假执行器模拟）。
+    -- 关键：只查对象存在不够——async 注入的 script 可能对象已挂但方法尚未初始化，
+    -- 或 showAd 半就绪导致回调被吞（表现为「看完没奖励」）。这里要求
+    -- showAd / isAdSupport 均为 function 才算真正就绪。
     function self:poll_init()
         if self.init_done then return true end
-        local check = run_js("window.MetaH5Ad && typeof window.MetaH5Ad === 'object' ? JSON.stringify({ready:true}) : JSON.stringify({ready:false})")
+        local check = run_js("(function(){var s=window.MetaH5Ad;var ready=!!s && typeof s==='object' && typeof s.showAd==='function' && typeof s.isAdSupport==='function';return JSON.stringify({ready:ready});})()")
         if type(check) == "table" and check.ready then
             self.init_done = true
             ctx.log("leyuan_ready", "sdk loaded")
@@ -181,28 +185,64 @@ function M.create(ctx, config)
         return self.init_done
     end
 
-    -- 发起播放。立即返回 { pending = true }；结果经 poll(request_id) 获取。
+    -- 发起播放。SDK 就绪 → 立即发起；未就绪 → 登记 pending_show，等就绪后再真正发起。
+    -- 一律立即返回 { pending = true }；结果经 poll(request_id) 获取。
+    -- 不再当场拒绝（旧逻辑 sdk_not_ready 会导致「第一次点不动 / 秒失败」，只有重启后
+    -- SDK 已缓存预热才走得通）；改为「等待就绪」兜底，弱网冷启动也能拉到广告。
     function self:show_rewarded(show_ctx)
-        if not self.init_done and not self:poll_init() then
-            ctx.log("leyuan_not_ready", "sdk not ready, refuse show")
-            return { success = false, status = nil, reason = "sdk_not_ready" }
-        end
         local request_id = show_ctx.request_id
-        local js = make_js(make_show_js(self.ad_type, request_id, show_ctx.timeout_ms, NORMALIZE_INJECTED), {
+        local ad_type = self.ad_type
+        local timeout_ms = show_ctx.timeout_ms
+
+        -- 就绪超时：SDK 始终没就绪则本次按 timeout 结算（由 poll 判定），
+        -- 而不是立刻失败，给 async script 加载留足时间。
+        local deadline = ctx.now_ms() + (self.sdk_load_timeout_ms or 15000)
+
+        if self:poll_init() then
+            self:_launch_show(request_id, ad_type, timeout_ms)
+        else
+            ctx.log("leyuan_show_queued", "sdk not ready yet, queueing request_id=" .. tostring(request_id))
+            self.pending_show = { request_id = request_id, ad_type = ad_type, timeout_ms = timeout_ms, deadline = deadline }
+        end
+        self.active_request = request_id
+        return { pending = true }
+    end
+
+    -- 真正发起 showAd：注入 JS 注册回调，结果带 request_id 写入 __ad_result__。
+    function self:_launch_show(request_id, ad_type, timeout_ms)
+        local js = make_js(make_show_js(ad_type, request_id, timeout_ms, NORMALIZE_INJECTED), {
             { "__REQ_ID__", request_id },
-            { "__ADTYPE__", tostring(self.ad_type) },
-            { "__TIMEOUT__", show_ctx.timeout_ms },
+            { "__ADTYPE__", tostring(ad_type) },
+            { "__TIMEOUT__", timeout_ms },
             { "__NORMALIZE__", NORMALIZE_INJECTED },
         })
         run_js(js)
-        self.active_request = request_id
         ctx.log("leyuan_show_started", "request_id=" .. tostring(request_id))
-        return { pending = true }
     end
 
     -- 轮询终态。nil = 未结束；result = 终态（含 stale 丢弃）。
     function self:poll(request_id)
         if self.active_request ~= request_id then return nil end
+
+        -- 待播队列：SDK 还没就绪。就绪后真正发起 showAd，并清掉待播登记。
+        if self.pending_show and self.pending_show.request_id == request_id then
+            if self:poll_init() then
+                local ps = self.pending_show
+                self.pending_show = nil
+                self:_launch_show(ps.request_id, ps.ad_type, ps.timeout_ms)
+                ctx.log("leyuan_show_deferred", "sdk ready, launched request_id=" .. tostring(request_id))
+                return nil -- 已发起，继续等终态
+            end
+            if ctx.now_ms() > self.pending_show.deadline then
+                -- SDK 一直没就绪：兜底结算为 sdk_not_ready，交给业务层决定回退。
+                self.pending_show = nil
+                self.active_request = nil
+                ctx.log("leyuan_settled", "sdk_not_ready")
+                return { success = false, status = nil, reason = "sdk_not_ready" }
+            end
+            return nil
+        end
+
         local res = run_js(make_js(make_poll_js(request_id), { { "__REQ_ID__", request_id } }))
         if type(res) ~= "table" then return nil end
         if res.pending then return nil end
@@ -226,6 +266,7 @@ function M.create(ctx, config)
         self.init_done = false
         self.loading_started = false
         self.active_request = nil
+        self.pending_show = nil
         ctx.js("(function(){ window.__ad_sdk_load_state__ = null; window.MetaH5Ad = undefined; })()")
     end
 
