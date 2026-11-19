@@ -45,6 +45,21 @@ local NORMALIZE_JS = [[
 })(__RAW__)
 ]]
 
+-- SDK 内部会调用 logBlue/logGreen/logRed/logYellow 等全局日志函数，
+-- 缺失时直接 ReferenceError，会打断 showAd 回调执行（表现为「看完没奖励」）。
+-- 这里只补缺失的，不覆盖已有实现。必须在注入 SDK script 之前执行。
+-- 对齐 cocos 的 installGlobalLogFallback。
+local LOG_FALLBACK_JS = [==[
+(function() {
+  var names = ['logBlue','logGreen','logRed','logYellow'];
+  for (var i=0;i<names.length;i++) {
+    if (typeof window[names[i]] !== 'function') {
+      window[names[i]] = function() {};
+    }
+  }
+})()
+]==]
+
 -- 注入 SDK script 标签。onload/onerror/超时都只写 __ad_sdk_load_state__，
 -- 不再等待结果——就绪与否由 Lua 侧每帧 poll_init 检查。
 local function make_load_sdk_js(sdk_url, load_timeout_ms)
@@ -153,6 +168,7 @@ function M.create(ctx, config)
         if self.init_done then return true end
         if not self.loading_started then
             ctx.log("leyuan_init", "injecting sdk script")
+            run_js(LOG_FALLBACK_JS) -- 先补 SDK 依赖的全局日志函数，避免 showAd 回调被打断
             run_js(make_js(make_load_sdk_js(self.sdk_url, self.sdk_load_timeout_ms), {
                 { "__SDK_URL__", self.sdk_url },
                 { "__LOAD_TIMEOUT__", self.sdk_load_timeout_ms },
